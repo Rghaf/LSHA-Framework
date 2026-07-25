@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""
+verifyta shim — lives INSIDE the container at /opt/uppaal/lib/app/bin/verifyta.
+
+Presents the same command line as the real binary:
+
+    verifyta [flags] <model.xml> <query.q>
+
+...but instead of executing UPPAAL locally (which segfaults under
+containerisation — see ../uppaal-bridge/server.py), it ships the two files to
+the bridge running natively on the host and relays the result back.
+
+stdout, stderr and the exit code are reproduced faithfully, so
+dynamic_tracegenerator.py's `subprocess.run(cmd, stdout=outfile, ...)` captures
+the trace exactly as it would from the real binary.
+
+Configured by environment (set in docker-compose.yml):
+    UPPAAL_BRIDGE_URL    e.g. http://host.docker.internal:8899
+    UPPAAL_BRIDGE_TOKEN  shared secret, must match the bridge
+"""
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+BRIDGE = os.environ.get("UPPAAL_BRIDGE_URL", "http://host.docker.internal:8899")
+TOKEN = os.environ.get("UPPAAL_BRIDGE_TOKEN", "")
+TIMEOUT = int(os.environ.get("UPPAAL_BRIDGE_TIMEOUT", "600"))
+
+
+def main(argv):
+    if "--version" in argv or "-v" in argv:
+        # Mirrors the real binary closely enough for probes/health checks.
+        try:
+            with urllib.request.urlopen(f"{BRIDGE}/health", timeout=10) as resp:
+                info = json.load(resp)
+            print(f"verifyta shim -> {BRIDGE} (bridge reports {info.get('verifyta')})")
+            return 0
+        except Exception as exc:  # noqa: BLE001
+            print(f"verifyta shim -> {BRIDGE} UNREACHABLE: {exc}", file=sys.stderr)
+            return 1
+
+    flags = [a for a in argv if a.startswith("-")]
+    files = [a for a in argv if not a.startswith("-")]
+    if len(files) < 2:
+        print(f"verifyta shim: expected <model> <query>, got {files}", file=sys.stderr)
+        return 2
+
+    model_path, query_path = files[-2], files[-1]
+    for path in (model_path, query_path):
+        if not os.path.exists(path):
+            print(f"verifyta shim: no such file: {path}", file=sys.stderr)
+            return 2
+
+    with open(model_path) as fh:
+        model_text = fh.read()
+    with open(query_path) as fh:
+        query_text = fh.read()
+
+    payload = json.dumps(
+        {"model": model_text, "query": query_text, "args": flags}
+    ).encode()
+
+    req = urllib.request.Request(
+        f"{BRIDGE}/verify",
+        data=payload,
+        headers={"Content-Type": "application/json", "X-Auth-Token": TOKEN},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            result = json.load(resp)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")
+        print(f"verifyta shim: bridge returned HTTP {exc.code}: {detail}",
+              file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"verifyta shim: cannot reach UPPAAL bridge at {BRIDGE}: "
+            f"{type(exc).__name__}: {exc}\n"
+            "Is it running on the host?  ./uppaal-bridge/run-bridge.sh",
+            file=sys.stderr,
+        )
+        return 1
+
+    sys.stdout.write(result.get("stdout", ""))
+    sys.stderr.write(result.get("stderr", ""))
+    return int(result.get("returncode", 1))
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

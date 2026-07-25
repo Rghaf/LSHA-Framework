@@ -1,0 +1,102 @@
+# Shared log settings — learning runs are chatty (the trace-generation guard
+# alone can emit hundreds of lines per task), so cap what any one service keeps.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    logging: *default-logging
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - UPPAAL_BRIDGE_URL=http://host.docker.internal:${UPPAAL_BRIDGE_PORT:-8899}
+      - RUN_MIGRATIONS=1
+    volumes:
+      - ./backend:/app
+      # verifyta cannot run inside a container (see uppaal-bridge/server.py), so
+      # the real binary is replaced by a shim that calls the host-side bridge.
+      - ./uppaal-bridge/verifyta:/opt/uppaal/lib/app/bin/verifyta:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    logging: *default-logging
+
+  celery-worker:
+    build: ./backend
+    env_file: .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - UPPAAL_BRIDGE_URL=http://host.docker.internal:${UPPAAL_BRIDGE_PORT:-8899}
+    volumes:
+      - ./backend:/app
+      - ./uppaal-bridge/verifyta:/opt/uppaal/lib/app/bin/verifyta:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # -E emits task events so Flower can report per-task progress and results.
+    command: celery -A lsha_web worker -l info -E
+    depends_on:
+      - redis
+    logging: *default-logging
+
+  # Celery dashboard: live view of workers, running/finished tasks, arguments,
+  # runtimes, results and tracebacks. http://localhost:5555
+  flower:
+    build: ./backend
+    env_file: .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # Lets /api/* be queried without credentials, so the dashboard can be
+      # scripted (curl, health checks). Drop this line if you expose Flower
+      # beyond localhost and don't set FLOWER_BASIC_AUTH.
+      - FLOWER_UNAUTHENTICATED_API=True
+    volumes:
+      - ./backend:/app
+    # To password-protect the dashboard, add FLOWER_BASIC_AUTH=user:pass to
+    # .env — Flower picks up FLOWER_* environment variables on its own. Passing
+    # an empty --basic-auth= on the command line instead would lock it at 401.
+    command: >
+      celery -A lsha_web flower
+      --port=5555
+      --persistent=True
+      --db=/app/results/flower.db
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    logging: *default-logging
+
+  frontend-dev:
+    build:
+      context: ./frontend
+      target: dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    profiles: ["dev"]
+    logging: *default-logging
+
+  frontend-prod:
+    build:
+      context: ./frontend
+      target: prod
+    ports:
+      - "80:80"
+    profiles: ["prod"]
+    logging: *default-logging
