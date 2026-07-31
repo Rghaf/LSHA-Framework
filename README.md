@@ -1,14 +1,48 @@
 # LSHA-framework
 
-A monorepo pairing two independently-versioned projects:
+A monorepo containing:
 
-| Directory | What it is | Upstream repo |
+| Directory | What it is |
+|---|---|
+| `backend/` | Django + Celery REST API wrapping the L\*SHA learning algorithm |
+| `frontend/` | React + Vite UI for submitting case studies and viewing results |
+| `uppaal-bridge/` | Host-side shim that lets the container reach UPPAAL |
+
+Both applications are tracked directly in this repository. The four L\*SHA
+algorithm packages under `backend/core_algorithm/` are **git submodules**
+pointing at their upstream sources.
+
+---
+
+## Cloning
+
+The algorithm packages are submodules, so clone recursively — a plain
+`git clone` leaves those four directories **empty**:
+
+```bash
+git clone --recurse-submodules https://github.com/Rghaf/LSHA-Framework.git
+```
+
+Already cloned without it? Populate them with:
+
+```bash
+git submodule update --init --recursive
+```
+
+| Submodule (`backend/core_algorithm/…`) | Upstream | Pinned |
 |---|---|---|
-| `backend/` | Django + Celery REST API wrapping the L\*SHA learning algorithm | `Rghaf/LSHA-Re-engineered` |
-| `frontend/` | React + Vite UI for submitting case studies and viewing results | `Rghaf/LSHA-Web-Application` |
+| `lsha` | `LesLivia/lsha` | `bea16c0` |
+| `autotwin_automata_learning` | `AutotwinEU/autotwin_automata_learning` | `c9c4ce3` |
+| `sha2dt_semantic_mapper` | `LesLivia/sha2dt_semantic_mapper` | `3343a8b` |
+| `skg_connector` | `LesLivia/skg_connector` | `4d6d13f` |
 
-Each keeps its own `.git` history; this top level only adds the files needed to run
-both together via Docker Compose.
+`core_algorithm/tasks.py` puts all four roots on `sys.path`; without them the
+Celery worker raises `ModuleNotFoundError` as soon as a learning task starts.
+
+> Input datasets (`case_files/PowModel_Learning/`, `OldData/`, `*.csv`) and all
+> generated output (`results/`, `media/`, `uploads/`, `db.sqlite3`) are excluded
+> from version control. The UPPAAL models, the case-study JSON configs and the
+> test suite **are** tracked, so the case studies remain runnable after a clone.
 
 ---
 

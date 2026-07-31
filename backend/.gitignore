@@ -1,0 +1,19 @@
+# Backend-specific ignores. Broad rules (data, results, secrets, __pycache__)
+# live in the repo-root .gitignore so they are declared in one place.
+#
+# NOTE: this file used to contain a blanket `case_files/*`, which also hid the
+# UPPAAL models (thermostat-v*.xml, *.q) and the test-suite configs that are
+# needed to actually run a case study. Bulk data is now excluded by path in the
+# root .gitignore instead.
+
+.venv/
+__pycache__/
+*.pyc
+
+media/
+uploads/
+results/
+db.sqlite3
+*.log
+
+.env

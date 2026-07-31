@@ -1,0 +1,11 @@
+#Read CSV file, after sim strategy selected
+send to the next page and make the user able to selected
+select variavles
+define events
+send to the server, save and show the summary
+get the variables in the server
+edit the algorithm code based on the variables got from user
+run the algorithm
+
+
+do same for uppaal method

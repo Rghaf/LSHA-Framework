@@ -1,0 +1,13 @@
+body {
+  font-family: "Inter", sans-serif;
+  background-image: linear-gradient(to bottom right, #f9fafb, #e5e7eb);
+
+  /* From: text-gray-800 (#1f2937) */
+  color: #1f2937;
+}
+
+/* Dark theme is toggled by the `.dark` class on <html> (see ThemeContext). */
+.dark body {
+  background-image: linear-gradient(to bottom right, #0f172a, #1e293b);
+  color: #e2e8f0;
+}

@@ -1,0 +1,12 @@
+[submodule "backend/core_algorithm/lsha"]
+	path = backend/core_algorithm/lsha
+	url = https://github.com/LesLivia/lsha.git
+[submodule "backend/core_algorithm/autotwin_automata_learning"]
+	path = backend/core_algorithm/autotwin_automata_learning
+	url = https://github.com/AutotwinEU/autotwin_automata_learning.git
+[submodule "backend/core_algorithm/sha2dt_semantic_mapper"]
+	path = backend/core_algorithm/sha2dt_semantic_mapper
+	url = https://github.com/LesLivia/sha2dt_semantic_mapper.git
+[submodule "backend/core_algorithm/skg_connector"]
+	path = backend/core_algorithm/skg_connector
+	url = https://github.com/LesLivia/skg_connector.git

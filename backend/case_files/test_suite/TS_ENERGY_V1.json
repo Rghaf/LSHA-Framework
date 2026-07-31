@@ -1,0 +1,347 @@
+{
+  "name": "TS-ENERGY-V1-RANGE200",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "CSV",
+  "driver_signal": [
+    "RPM",
+    "PR"
+  ],
+  "main_variable": "POWER",
+  "context_variables": [],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": true,
+  "user_json": {
+    "case_study": "ENERGY",
+    "version": "V1-RANGE200",
+    "variables": [
+      {
+        "name": "POWER",
+        "source": "POWER_kW",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "RPM",
+        "source": "HEADSTOCK__SPINDLE_MOTOR___1___RPM",
+        "role": "driver",
+        "type": "REAL"
+      },
+      {
+        "name": "PR",
+        "source": "RT__PALLET_LOCKING___1___PRESSURE",
+        "role": "driver",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Spindle power (pwr_model)",
+        "type": "MEAN"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "l",
+        "model_id": 0,
+        "guard": "math.fabs(PR - prev_PR) > 500 and PR > 500 and prev_PR <= 500"
+      },
+      {
+        "symbol": "u",
+        "model_id": 0,
+        "guard": "math.fabs(PR - prev_PR) > 500"
+      },
+      {
+        "symbol": "i_0",
+        "model_id": 0,
+        "guard": "RPM < 100"
+      },
+      {
+        "symbol": "m_0",
+        "model_id": 0,
+        "guard": "100 <= RPM and RPM < 300"
+      },
+      {
+        "symbol": "m_1",
+        "model_id": 0,
+        "guard": "300 <= RPM and RPM < 500"
+      },
+      {
+        "symbol": "m_2",
+        "model_id": 0,
+        "guard": "500 <= RPM and RPM < 700"
+      },
+      {
+        "symbol": "m_3",
+        "model_id": 0,
+        "guard": "700 <= RPM and RPM < 900"
+      },
+      {
+        "symbol": "m_4",
+        "model_id": 0,
+        "guard": "900 <= RPM and RPM < 1100"
+      },
+      {
+        "symbol": "m_5",
+        "model_id": 0,
+        "guard": "1100 <= RPM and RPM < 1300"
+      },
+      {
+        "symbol": "m_6",
+        "model_id": 0,
+        "guard": "1300 <= RPM and RPM < 1500"
+      },
+      {
+        "symbol": "m_7",
+        "model_id": 0,
+        "guard": "1500 <= RPM and RPM < 1700"
+      },
+      {
+        "symbol": "m_8",
+        "model_id": 0,
+        "guard": "1700 <= RPM and RPM < 1900"
+      },
+      {
+        "symbol": "m_9",
+        "model_id": 0,
+        "guard": "1900 <= RPM and RPM < 2100"
+      },
+      {
+        "symbol": "m_10",
+        "model_id": 0,
+        "guard": "2100 <= RPM and RPM < 2300"
+      },
+      {
+        "symbol": "m_11",
+        "model_id": 0,
+        "guard": "2300 <= RPM and RPM < 2500"
+      },
+      {
+        "symbol": "m_12",
+        "model_id": 0,
+        "guard": "2500 <= RPM and RPM < 2700"
+      },
+      {
+        "symbol": "m_13",
+        "model_id": 0,
+        "guard": "2700 <= RPM and RPM < 2900"
+      },
+      {
+        "symbol": "m_14",
+        "model_id": 0,
+        "guard": "2900 <= RPM and RPM < 3100"
+      },
+      {
+        "symbol": "m_15",
+        "model_id": 0,
+        "guard": "3100 <= RPM and RPM < 3300"
+      },
+      {
+        "symbol": "m_16",
+        "model_id": 0,
+        "guard": "3300 <= RPM and RPM < 3500"
+      },
+      {
+        "symbol": "m_17",
+        "model_id": 0,
+        "guard": "3500 <= RPM and RPM < 3700"
+      },
+      {
+        "symbol": "m_18",
+        "model_id": 0,
+        "guard": "3700 <= RPM and RPM < 3900"
+      },
+      {
+        "symbol": "m_19",
+        "model_id": 0,
+        "guard": "3900 <= RPM and RPM < 4100"
+      },
+      {
+        "symbol": "m_20",
+        "model_id": 0,
+        "guard": "4100 <= RPM and RPM < 4300"
+      },
+      {
+        "symbol": "m_21",
+        "model_id": 0,
+        "guard": "4300 <= RPM and RPM < 4500"
+      },
+      {
+        "symbol": "m_22",
+        "model_id": 0,
+        "guard": "4500 <= RPM and RPM < 4700"
+      },
+      {
+        "symbol": "m_23",
+        "model_id": 0,
+        "guard": "4700 <= RPM and RPM < 4900"
+      },
+      {
+        "symbol": "m_24",
+        "model_id": 0,
+        "guard": "4900 <= RPM and RPM < 5100"
+      },
+      {
+        "symbol": "m_25",
+        "model_id": 0,
+        "guard": "5100 <= RPM and RPM < 5300"
+      },
+      {
+        "symbol": "m_26",
+        "model_id": 0,
+        "guard": "5300 <= RPM and RPM < 5500"
+      },
+      {
+        "symbol": "m_27",
+        "model_id": 0,
+        "guard": "5500 <= RPM and RPM < 5700"
+      },
+      {
+        "symbol": "m_28",
+        "model_id": 0,
+        "guard": "5700 <= RPM and RPM < 5900"
+      },
+      {
+        "symbol": "m_29",
+        "model_id": 0,
+        "guard": "5900 <= RPM and RPM < 6100"
+      },
+      {
+        "symbol": "m_30",
+        "model_id": 0,
+        "guard": "6100 <= RPM and RPM < 6300"
+      },
+      {
+        "symbol": "m_31",
+        "model_id": 0,
+        "guard": "6300 <= RPM and RPM < 6500"
+      },
+      {
+        "symbol": "m_32",
+        "model_id": 0,
+        "guard": "6500 <= RPM and RPM < 6700"
+      },
+      {
+        "symbol": "m_33",
+        "model_id": 0,
+        "guard": "6700 <= RPM and RPM < 6900"
+      },
+      {
+        "symbol": "m_34",
+        "model_id": 0,
+        "guard": "6900 <= RPM and RPM < 7100"
+      },
+      {
+        "symbol": "m_35",
+        "model_id": 0,
+        "guard": "7100 <= RPM and RPM < 7300"
+      },
+      {
+        "symbol": "m_36",
+        "model_id": 0,
+        "guard": "7300 <= RPM and RPM < 7500"
+      },
+      {
+        "symbol": "m_37",
+        "model_id": 0,
+        "guard": "7500 <= RPM and RPM < 7700"
+      },
+      {
+        "symbol": "m_38",
+        "model_id": 0,
+        "guard": "7700 <= RPM and RPM < 7900"
+      },
+      {
+        "symbol": "m_39",
+        "model_id": 0,
+        "guard": "7900 <= RPM and RPM < 8100"
+      },
+      {
+        "symbol": "m_40",
+        "model_id": 0,
+        "guard": "8100 <= RPM and RPM < 8300"
+      },
+      {
+        "symbol": "m_41",
+        "model_id": 0,
+        "guard": "8300 <= RPM and RPM < 8500"
+      },
+      {
+        "symbol": "m_42",
+        "model_id": 0,
+        "guard": "8500 <= RPM and RPM < 8700"
+      },
+      {
+        "symbol": "m_43",
+        "model_id": 0,
+        "guard": "8700 <= RPM and RPM < 8900"
+      },
+      {
+        "symbol": "m_44",
+        "model_id": 0,
+        "guard": "8900 <= RPM and RPM < 9100"
+      },
+      {
+        "symbol": "m_45",
+        "model_id": 0,
+        "guard": "9100 <= RPM and RPM < 9300"
+      },
+      {
+        "symbol": "m_46",
+        "model_id": 0,
+        "guard": "9300 <= RPM and RPM < 9500"
+      },
+      {
+        "symbol": "m_47",
+        "model_id": 0,
+        "guard": "9500 <= RPM and RPM < 9700"
+      },
+      {
+        "symbol": "m_48",
+        "model_id": 0,
+        "guard": "9700 <= RPM and RPM < 9900"
+      },
+      {
+        "symbol": "m_49",
+        "model_id": 0,
+        "guard": "9900 <= RPM"
+      }
+    ],
+    "constants": {
+      "MIN_SPEED": 100,
+      "MAX_SPEED": 10000,
+      "SPEED_RANGE": 200,
+      "PR_RANGE": 500
+    },
+    "trace_generation": {
+      "strategy": "CSV",
+      "csv": {
+        "wide_or_long": "wide",
+        "timestamp_column": "TimestampUTC",
+        "interpolate_method": "ffill",
+        "derive_columns": {
+          "HEADSTOCK__SPINDLE_DRIVE___1___ENERGY": {
+            "factor": 60,
+            "target": "POWER_kW"
+          }
+        },
+        "round_columns": {
+          "HEADSTOCK__SPINDLE_MOTOR___1___RPM": 100
+        }
+      },
+      "physics_constants": {
+        "tolerances": {
+          "RPM": 200,
+          "PR": 500
+        }
+      }
+    }
+  }
+}
