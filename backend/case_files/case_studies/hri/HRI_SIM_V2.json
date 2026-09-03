@@ -1,0 +1,107 @@
+{
+  "name": "HRI-SIM-V2",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "CSV",
+  "driver_signal": [
+    "busy"
+  ],
+  "main_variable": "F",
+  "context_variables": [
+    "posX",
+    "posY"
+  ],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": true,
+  "user_json": {
+    "case_study": "HRI",
+    "version": "SIM_V2",
+    "variables": [
+      {
+        "name": "F",
+        "source": "humanFatigue",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "posX",
+        "source": "humanPositionX",
+        "role": "context",
+        "type": "REAL"
+      },
+      {
+        "name": "busy",
+        "source": "moving",
+        "role": "driver",
+        "type": "INT"
+      },
+      {
+        "name": "posY",
+        "source": "humanPositionY",
+        "role": "context",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Idle (idle_model, exp. decay)",
+        "type": "EXP_DECAY",
+        "estimator": "EXP_DECAY_RATE"
+      },
+      {
+        "id": 1,
+        "name": "Busy (busy_model, exp. growth)",
+        "type": "EXP_GROWTH",
+        "estimator": "EXP_GROWTH_SAT"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "u_2",
+        "model_id": 1,
+        "guard": "busy == 1 and (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and not (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
+      },
+      {
+        "symbol": "d_2",
+        "model_id": 0,
+        "guard": "busy == 0 and (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and not (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
+      },
+      {
+        "symbol": "u_3",
+        "model_id": 1,
+        "guard": "busy == 1 and not (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
+      },
+      {
+        "symbol": "d_3",
+        "model_id": 0,
+        "guard": "busy == 0 and not (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
+      },
+      {
+        "symbol": "u_4",
+        "model_id": 1,
+        "guard": "busy == 1"
+      },
+      {
+        "symbol": "d_4",
+        "model_id": 0,
+        "guard": "busy == 0"
+      }
+    ],
+    "constants": {},
+    "trace_generation": {
+      "strategy": "CSV",
+      "csv": {
+        "wide_or_long": "wide",
+        "timestamp_column": "t",
+        "interpolate_method": "ffill"
+      }
+    }
+  }
+}

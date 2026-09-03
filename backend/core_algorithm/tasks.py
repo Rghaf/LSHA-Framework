@@ -624,7 +624,7 @@ def run_lsha_learning_task(case_study_id):
             try:
                 from .dynamic_sul import (
                     label_event_dynamic as _lbl,
-                    _get_model_type_for_segment as _typ,
+                    _get_model_def_for_segment as _mdef,
                 )
                 pt_start = segment[0]
                 start_t = pt_start.t.to_secs() if hasattr(pt_start, 't') else (
@@ -632,14 +632,19 @@ def run_lsha_learning_task(case_study_id):
                     else float(pt_start[0])
                 )
                 start_idx = int(np.where(sig_dict['time'] == start_t)[0][0])
-                return (_typ(sig_dict, start_idx, args) or 'MEAN').upper()
+                model_def = _mdef(sig_dict, start_idx, args) or {}
+                return (model_def.get('type', 'MEAN') or 'MEAN').upper()
             except Exception:
                 return 'MEAN'
 
         def get_physics_param_adapter(segment, flow, *, args):
+            # Returns None when this segment yields no usable estimate. The
+            # legacy get_*_param functions do the same, and the teacher filters
+            # with `[met for met in metrics if met is not None]`. Coercing to
+            # 0.0 here silently averaged a zero into the distribution.
             sig_dict = args.get('__current_trace_cache__')
             if not sig_dict or len(segment) < 2:
-                return 0.0
+                return None
 
             try:
                 pt_start, pt_end = segment[0], segment[-1]
@@ -656,19 +661,23 @@ def run_lsha_learning_task(case_study_id):
                 # _RATE_BASED_FLOWS comment above for the rationale.
                 flow_type = _flow_type_for(segment, args)
 
-                val = 0.0
-                if flow_type in _RATE_BASED_FLOWS and 'rate' in params:
+                val = None
+                if flow_type in _RATE_BASED_FLOWS and params.get('rate') is not None:
                     val = float(params['rate'])
-                elif 'mean' in params:
+                elif params.get('mean') is not None:
                     val = float(params['mean'])
-                elif 'rate' in params:
+                elif params.get('rate') is not None:
                     val = float(params['rate'])
 
-                # THE MAGIC FIX: Prevent infinite loops in D mode!
+                if val is None:
+                    return None
+
+                # Rounding keeps the deterministic-mode equality check from
+                # splitting on floating-point noise.
                 return round(val, 4)
 
-            except Exception as e:
-                return 0.0
+            except Exception:
+                return None
 
         sul = SystemUnderLearning(
             rv_vars=rv_vars,

@@ -1359,11 +1359,20 @@ def get_physics_param_dynamic(signals, start_i, end_i, args=None):
     # Arithmetic mean is always computed and always returned
     mean_val = float(np.mean(segment))
 
-    # Determine the flow model type for this segment
-    model_type = _get_model_type_for_segment(signals, start_i, args)
+    # Determine the flow model for this segment
+    model_def = _get_model_def_for_segment(signals, start_i, args)
+    model_type = (model_def.get('type', 'MEAN') or 'MEAN').upper()
 
-    # Compute the model-specific rate parameter
-    rate_val = _compute_rate(segment, model_type)
+    # A model may name a case-study-faithful estimator; when it does, that wins
+    # over the generic branches in _compute_rate (see the block below it).
+    estimator = str(model_def.get('estimator', '') or '').upper()
+    if estimator in KNOWN_ESTIMATORS:
+        # May legitimately be None (degenerate segment) — propagate it so the
+        # teacher drops the segment instead of averaging in a zero.
+        rate_val = _estimate_with(list(segment), estimator,
+                                  model_def.get('time_constant'))
+    else:
+        rate_val = _compute_rate(segment, model_type)
 
     return {'mean': mean_val, 'rate': rate_val}
 
@@ -1372,13 +1381,16 @@ def get_physics_param_dynamic(signals, start_i, end_i, args=None):
 # INTERNAL HELPERS for parameter extraction
 # ===========================================================================
 
-def _get_model_type_for_segment(signals, start_i, args):
+def _get_model_def_for_segment(signals, start_i, args):
     """
-    Look up the flow model type for the event that fired at ``start_i``.
+    Look up the flow model *definition* for the event that fired at ``start_i``.
 
+    Returns the whole model dict (not just its ``type``) so callers can also
+    read ``estimator`` / ``time_constant``. Falls back to a bare MEAN model.
     """
+    fallback = {'type': 'MEAN'}
     if args is None:
-        return 'MEAN'
+        return fallback
 
     # Identify which event is active at the start of this segment
     symbol = label_event_dynamic(signals, start_i, args)
@@ -1391,14 +1403,14 @@ def _get_model_type_for_segment(signals, start_i, args):
             break
 
     if model_id is None:
-        return 'MEAN'
+        return fallback
 
-    # Resolve model_id → type
+    # Resolve model_id → the model definition itself
     for model_def in args.get('models', []):
         if model_def.get('id') == model_id:
-            return (model_def.get('type', 'MEAN') or 'MEAN').upper()
+            return model_def
 
-    return 'MEAN'
+    return fallback
 
 
 def _compute_rate(segment, model_type):
@@ -1479,3 +1491,103 @@ def _compute_rate(segment, model_type):
 
     except (ValueError, ZeroDivisionError):
         return 0.0
+
+
+# ---------------------------------------------------------------------------
+# Case-study-faithful estimators
+#
+# The generic `_compute_rate` branches above do NOT reproduce the estimators the
+# original hard-coded case studies used, and the difference is not cosmetic —
+# it changes the learned parameter by orders of magnitude. Measured on a real
+# THERMO trace (ground truth: heating 0.7, cooling 100.0):
+#
+#     segment    legacy      _compute_rate
+#     heating    0.7001      0.4876          <- raw increment, unnormalised
+#     cooling  100.0000      0.0100          <- reciprocal of the time constant
+#
+# The exponential families also disagree on what "the parameter" *is*:
+#
+#   THERMO  get_thermo_param  cooling -> -1/ln(v_i/v_{i-1})            = tau (100)
+#                             heating -> (v_i - v_{i-1}·e^(-1/R))
+#                                        / (R·(1 - e^(-1/R)))          = K   (0.7)
+#   HRI     get_ftg_param     idle    -> |ln(v_i/v_{i-1})|             = rate (0.003)
+#                             busy    -> |ln((1-v_i)/(1-v_{i-1}))|     = rate (0.004)
+#
+# THERMO wants the *time constant*, HRI wants the *rate* — reciprocal
+# conventions for the same EXP_DECAY model type. No single generic formula can
+# serve both, so the estimator is selected per model via an optional
+# ``estimator`` key, with ``time_constant`` supplying R where needed:
+#
+#     { "id": 0, "type": "EXP_GROWTH",
+#       "estimator": "EXP_GROWTH_NEWTON", "time_constant": 100.0 }
+#
+# Omitting ``estimator`` preserves the previous generic behaviour exactly, so
+# existing case-study JSON keeps working unchanged.
+# ---------------------------------------------------------------------------
+
+#: Estimator names handled by :func:`_estimate_with`.
+KNOWN_ESTIMATORS = {
+    'EXP_DECAY_TAU', 'EXP_DECAY_RATE',
+    'EXP_GROWTH_NEWTON', 'EXP_GROWTH_SAT',
+}
+
+
+def _estimate_with(vals, estimator, time_constant):
+    """Apply a named, case-study-faithful estimator to one segment.
+
+    Returns ``None`` when the segment yields no usable sample — matching the
+    legacy estimators, which return ``None`` so the teacher can drop the
+    segment via ``[met for met in metrics if met is not None]``.
+
+    Returning 0.0 instead would keep the segment and average a spurious zero
+    into the distribution: a word with five good 0.7 segments and one
+    degenerate segment reported 0.583 (= 0.7 * 5/6) rather than 0.7.
+    """
+    if len(vals) < 2:
+        return None
+    try:
+        if estimator == 'EXP_DECAY_TAU':
+            # THERMO cooling: x(t) = x0·exp(-t/R)  ->  R = -1/ln(x_i/x_{i-1})
+            ratios = [vals[i] / vals[i - 1] for i in range(1, len(vals))
+                      if vals[i - 1] > 0 and vals[i] > 0]
+            taus = [-1.0 / math.log(r) for r in ratios if r != 1.0]
+            return sum(taus) / len(taus) if taus else None
+
+        if estimator == 'EXP_DECAY_RATE':
+            # HRI idle: F(t) = F0·exp(-mu·t)  ->  mu = |ln(F_i/F_{i-1})|
+            mus = [math.log(vals[i] / vals[i - 1]) for i in range(1, len(vals))
+                   if vals[i - 1] > 0 and vals[i] > 0 and vals[i] != vals[i - 1]]
+            return abs(sum(mus) / len(mus)) if mus else None
+
+        if estimator == 'EXP_GROWTH_NEWTON':
+            # THERMO heating. Discretising
+            #     x(t) = R·K - (R·K - x0)·exp(-t/R)
+            # over a unit step gives
+            #     x_i = x_{i-1}·e^(-1/R) + R·K·(1 - e^(-1/R))
+            # so K follows by inverting that update.
+            R = float(time_constant or 0.0)
+            if R <= 0:
+                return None
+            decay = math.exp(-1.0 / R)
+            denom = R * (1.0 - decay)
+            if denom == 0:
+                return None
+            incs = [vals[i] - vals[i - 1] * decay for i in range(1, len(vals))
+                    if vals[i] != vals[i - 1]]
+            ks = [d / denom for d in incs if d != 0]
+            return sum(ks) / len(ks) if ks else None
+
+        if estimator == 'EXP_GROWTH_SAT':
+            # HRI busy: F(t) = 1 - (1-F0)·exp(-lambda·t), saturating at 1
+            #     lambda = |ln((1-F_i)/(1-F_{i-1}))|
+            lams = []
+            for i in range(1, len(vals)):
+                a, b = 1.0 - vals[i], 1.0 - vals[i - 1]
+                if a > 0 and b > 0 and vals[i] != vals[i - 1]:
+                    lams.append(math.log(a / b))
+            return abs(sum(lams) / len(lams)) if lams else None
+
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return None
+
+    return None

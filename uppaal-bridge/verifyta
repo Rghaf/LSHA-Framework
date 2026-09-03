@@ -42,17 +42,31 @@ def main(argv):
             print(f"verifyta shim -> {BRIDGE} UNREACHABLE: {exc}", file=sys.stderr)
             return 1
 
-    flags = [a for a in argv if a.startswith("-")]
-    files = [a for a in argv if not a.startswith("-")]
+    # Argument order differs between callers: dynamic_tracegenerator emits
+    #   verifyta -t0 <model> <query>
+    # while the legacy resources/scripts/verify.sh emits
+    #   verifyta <model> <query> -r <seed>
+    # Identifying the model/query as the arguments that are existing files makes
+    # parsing order-independent, and keeps `-r`'s numeric value from being
+    # mistaken for a filename.
+    flags, files, i = [], [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a.startswith("-"):
+            flags.append(a)
+            # flags that consume a following value
+            if a in ("-r", "-s", "-S", "-H", "-o") and i + 1 < len(argv):
+                flags.append(argv[i + 1])
+                i += 1
+        elif os.path.exists(a):
+            files.append(a)
+        i += 1
+
     if len(files) < 2:
-        print(f"verifyta shim: expected <model> <query>, got {files}", file=sys.stderr)
+        print(f"verifyta shim: expected <model> <query> among {argv}", file=sys.stderr)
         return 2
 
-    model_path, query_path = files[-2], files[-1]
-    for path in (model_path, query_path):
-        if not os.path.exists(path):
-            print(f"verifyta shim: no such file: {path}", file=sys.stderr)
-            return 2
+    model_path, query_path = files[0], files[1]
 
     with open(model_path) as fh:
         model_text = fh.read()

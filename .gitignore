@@ -41,15 +41,24 @@ backend/case_files/OldData/
 backend/case_files/*.zip
 backend/case_files/*.csv
 
-# Test-suite run artefacts (the generator + configs ARE tracked)
+# Test-suite / case-study run artefacts (the generators + configs ARE tracked)
 backend/case_files/test_suite/results/
+backend/case_files/case_studies/results/
 
 # ---------------------------------------------------------------------------
-# Analysis documents — kept local, not published
+# Analysis documents & thesis chapters — kept local, not published
 # ---------------------------------------------------------------------------
 docs/CASE_STUDY_DEFINITIONS.md
 docs/CASE_STUDY_JSON_SCHEMA.md
 docs/TEST_REPORT.md
+docs/CASE_STUDY_THERMO.md
+docs/CASE_STUDY_HRI.md
+docs/CASE_STUDY_ENERGY.md
+docs/CASE_STUDY_GREEN.md
+docs/LEGACY_VS_PLATFORM.md
+docs/RELATED_WORK.md
+docs/CHAPTER_*.md
+docs/screenshots/
 
 # ---------------------------------------------------------------------------
 # Editor / OS noise
@@ -58,3 +67,8 @@ docs/TEST_REPORT.md
 __MACOSX/
 .idea/
 .vscode/
+
+# ---------------------------------------------------------------------------
+# Claude Code local tool state (worktrees, etc.) — never committed
+# ---------------------------------------------------------------------------
+.claude/

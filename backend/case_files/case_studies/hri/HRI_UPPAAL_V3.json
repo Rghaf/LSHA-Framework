@@ -1,0 +1,103 @@
+{
+  "name": "HRI-UPPAAL-V3",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "UPPAAL",
+  "driver_signal": [
+    "busy"
+  ],
+  "main_variable": "F",
+  "context_variables": [
+    "posX",
+    "posY"
+  ],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": false,
+  "user_json": {
+    "case_study": "HRI",
+    "version": "UPPAAL_V3",
+    "variables": [
+      {
+        "name": "F",
+        "source": "humanFatigue[currH - 1]",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "posX",
+        "source": "humanPositionX[currH - 1]",
+        "role": "context",
+        "type": "REAL"
+      },
+      {
+        "name": "busy",
+        "source": "amy.busy || amy.p_2 || amy.run || amy.p_4",
+        "role": "driver",
+        "type": "INT"
+      },
+      {
+        "name": "posY",
+        "source": "humanPositionY[currH - 1]",
+        "role": "context",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Idle (idle_model, exp. decay)",
+        "type": "EXP_DECAY",
+        "estimator": "EXP_DECAY_RATE"
+      },
+      {
+        "id": 1,
+        "name": "Busy (busy_model, exp. growth)",
+        "type": "EXP_GROWTH",
+        "estimator": "EXP_GROWTH_SAT"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "u_2",
+        "model_id": 1,
+        "guard": "busy == 1 and (posX >= 2000 and posY <= 3000) and not (posX >= 2000 and 1000 <= posY and posY <= 3000)"
+      },
+      {
+        "symbol": "d_2",
+        "model_id": 0,
+        "guard": "busy == 0 and (posX >= 2000 and posY <= 3000) and not (posX >= 2000 and 1000 <= posY and posY <= 3000)"
+      },
+      {
+        "symbol": "u_3",
+        "model_id": 1,
+        "guard": "busy == 1 and not (posX >= 2000 and posY <= 3000) and (posX >= 2000 and 1000 <= posY and posY <= 3000)"
+      },
+      {
+        "symbol": "d_3",
+        "model_id": 0,
+        "guard": "busy == 0 and not (posX >= 2000 and posY <= 3000) and (posX >= 2000 and 1000 <= posY and posY <= 3000)"
+      },
+      {
+        "symbol": "u_4",
+        "model_id": 1,
+        "guard": "busy == 1"
+      },
+      {
+        "symbol": "d_4",
+        "model_id": 0,
+        "guard": "busy == 0"
+      }
+    ],
+    "constants": {},
+    "trace_generation": {
+      "strategy": "UPPAAL",
+      "max_length": 15
+    }
+  }
+}

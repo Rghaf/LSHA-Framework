@@ -1,0 +1,168 @@
+{
+  "name": "GREEN-V1",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "CSV",
+  "driver_signal": [
+    "sp",
+    "tmp"
+  ],
+  "main_variable": "Ta",
+  "context_variables": [],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": true,
+  "user_json": {
+    "case_study": "GREEN",
+    "version": "V1",
+    "variables": [
+      {
+        "name": "Ta",
+        "source": "TCuscinettiAlimentazione",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "sp",
+        "source": "SpeedSP",
+        "role": "driver",
+        "type": "REAL"
+      },
+      {
+        "name": "tmp",
+        "source": "Value",
+        "role": "driver",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Absorption (modello_assorbimento)",
+        "type": "MEAN"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "sp_0",
+        "model_id": 0,
+        "guard": "20 <= sp and sp < 25"
+      },
+      {
+        "symbol": "sp_1",
+        "model_id": 0,
+        "guard": "25 <= sp and sp < 30"
+      },
+      {
+        "symbol": "sp_2",
+        "model_id": 0,
+        "guard": "30 <= sp and sp < 35"
+      },
+      {
+        "symbol": "sp_3",
+        "model_id": 0,
+        "guard": "35 <= sp and sp < 40"
+      },
+      {
+        "symbol": "sp_4",
+        "model_id": 0,
+        "guard": "40 <= sp and sp < 45"
+      },
+      {
+        "symbol": "sp_5",
+        "model_id": 0,
+        "guard": "45 <= sp and sp < 50"
+      },
+      {
+        "symbol": "sp_6",
+        "model_id": 0,
+        "guard": "50 <= sp and sp < 55"
+      },
+      {
+        "symbol": "sp_7",
+        "model_id": 0,
+        "guard": "55 <= sp and sp < 60"
+      },
+      {
+        "symbol": "sp_8",
+        "model_id": 0,
+        "guard": "60 <= sp and sp < 65"
+      },
+      {
+        "symbol": "sp_9",
+        "model_id": 0,
+        "guard": "65 <= sp"
+      },
+      {
+        "symbol": "tmp_10",
+        "model_id": 0,
+        "guard": "10 <= tmp and tmp < 13"
+      },
+      {
+        "symbol": "tmp_11",
+        "model_id": 0,
+        "guard": "13 <= tmp and tmp < 16"
+      },
+      {
+        "symbol": "tmp_12",
+        "model_id": 0,
+        "guard": "16 <= tmp and tmp < 19"
+      },
+      {
+        "symbol": "tmp_13",
+        "model_id": 0,
+        "guard": "19 <= tmp and tmp < 22"
+      },
+      {
+        "symbol": "tmp_14",
+        "model_id": 0,
+        "guard": "22 <= tmp and tmp < 25"
+      },
+      {
+        "symbol": "tmp_15",
+        "model_id": 0,
+        "guard": "25 <= tmp and tmp < 28"
+      },
+      {
+        "symbol": "tmp_16",
+        "model_id": 0,
+        "guard": "28 <= tmp"
+      },
+      {
+        "symbol": "s",
+        "model_id": 0,
+        "guard": ""
+      }
+    ],
+    "constants": {
+      "MIN_PUMP_SPEED": 20,
+      "MAX_PUMP_SPEED": 70,
+      "PUMP_SPEED_RANGE": 5,
+      "MIN_TMPRT": 10,
+      "MAX_TMPRT": 30,
+      "TMPRT_RANGE": 3
+    },
+    "trace_generation": {
+      "strategy": "CSV",
+      "csv": {
+        "wide_or_long": "long",
+        "timestamp_column": "TimeStamp",
+        "field_column": "DataObjectField",
+        "value_column": "Value",
+        "interpolate_method": "linear",
+        "bundle_all_csv": true
+      },
+      "physics_constants": {
+        "tolerances": {
+          "sp": 5,
+          "tmp": 3
+        }
+      }
+    }
+  }
+}

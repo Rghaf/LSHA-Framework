@@ -50,15 +50,20 @@ Activate the licence once, natively on the host:
 /opt/uppaal/lib/app/bin/verifyta -k <your-licence-key>
 ```
 
-Then start the bridge before running UPPAAL case studies:
+Then, from the repo root, bring the stack up with the wrapper instead of raw
+`docker compose` — it starts this bridge first (and stops it again when the
+stack does):
 
 ```bash
-./uppaal-bridge/run-bridge.sh
+./run-stack.sh up --build
 ```
 
-Leave it running in its own terminal, and bring the stack up as usual:
+If you'd rather manage the bridge's lifetime yourself — e.g. to keep it running
+across several `docker compose` invocations — start it by hand in its own
+terminal and use plain `docker compose` as usual:
 
 ```bash
+./uppaal-bridge/run-bridge.sh   # leave running in its own terminal
 docker compose up
 ```
 

@@ -294,6 +294,8 @@ class CustomTeacher:
 
             metrics = [self.sul.get_ht_params(segment, flow) for segment in segments]
             metrics = [met for met in metrics if met is not None]
+            if not metrics:
+                return self.distributions[self.sul.default_d]
             unique_metrics = list(set(metrics))
 
             if len(unique_metrics) > 1:
@@ -349,6 +351,12 @@ class CustomTeacher:
             # randomly distributed metrics for each segment
             metrics = [self.sul.get_ht_params(segment, flow) for segment in segments]
             metrics = [met for met in metrics if met is not None]
+            # Every segment may be degenerate (too short / no usable increment),
+            # in which case there is nothing to test and no distribution to
+            # create. Fall back to the SUL's default rather than dividing by
+            # zero on the mean below.
+            if not metrics:
+                return self.distributions[self.sul.default_d]
             avg_metrics = sum(metrics) / len(metrics)
 
             min_dist, best_fit = 1000, None
@@ -372,7 +380,20 @@ class CustomTeacher:
 
                     v2 = []
 
-                    if self.is_aggregation:
+                    # The legacy teacher gates BOTH v1 and v2 on the same
+                    # condition (`CS == 'THERMO'`), which maps here to
+                    # `not self.is_aggregation`:
+                    #
+                    #   THERMO : v1 = metrics       v2 = hist[distr]     (raw)
+                    #   others : v1 = [avg]*50      v2 = [m]*10 per m    (+noise)
+                    #
+                    # This branch was inverted, so a non-aggregating case study
+                    # compared raw metrics (v1) against a 10x-replicated
+                    # history (v2). The mismatched sample sizes skew
+                    # ks_2samp, equivalent segments fail to merge, and each one
+                    # spawns a fresh distribution — e.g. THERMO V1 reported
+                    # 0.699900 and 0.700100 as two distributions instead of one.
+                    if not self.is_aggregation:
                         v2 = self.hist[distr]
                         noise2 = [0] * len(v2)
                     else:

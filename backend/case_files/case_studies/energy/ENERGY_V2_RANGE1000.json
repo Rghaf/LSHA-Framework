@@ -1,0 +1,147 @@
+{
+  "name": "ENERGY-V2-RANGE1000",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "CSV",
+  "driver_signal": [
+    "RPM",
+    "PR"
+  ],
+  "main_variable": "POWER",
+  "context_variables": [],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": true,
+  "user_json": {
+    "case_study": "ENERGY",
+    "version": "V2-RANGE1000",
+    "variables": [
+      {
+        "name": "POWER",
+        "source": "POWER_kW",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "RPM",
+        "source": "HEADSTOCK__SPINDLE_MOTOR___1___RPM",
+        "role": "driver",
+        "type": "REAL"
+      },
+      {
+        "name": "PR",
+        "source": "RT__PALLET_LOCKING___1___PRESSURE",
+        "role": "driver",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Spindle power (pwr_model)",
+        "type": "MEAN"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "l",
+        "model_id": 0,
+        "guard": "math.fabs(PR - prev_PR) > 500 and PR > 500 and prev_PR <= 500"
+      },
+      {
+        "symbol": "u",
+        "model_id": 0,
+        "guard": "math.fabs(PR - prev_PR) > 500"
+      },
+      {
+        "symbol": "i_0",
+        "model_id": 0,
+        "guard": "RPM < 100"
+      },
+      {
+        "symbol": "m_0",
+        "model_id": 0,
+        "guard": "100 <= RPM and RPM < 1100"
+      },
+      {
+        "symbol": "m_1",
+        "model_id": 0,
+        "guard": "1100 <= RPM and RPM < 2100"
+      },
+      {
+        "symbol": "m_2",
+        "model_id": 0,
+        "guard": "2100 <= RPM and RPM < 3100"
+      },
+      {
+        "symbol": "m_3",
+        "model_id": 0,
+        "guard": "3100 <= RPM and RPM < 4100"
+      },
+      {
+        "symbol": "m_4",
+        "model_id": 0,
+        "guard": "4100 <= RPM and RPM < 5100"
+      },
+      {
+        "symbol": "m_5",
+        "model_id": 0,
+        "guard": "5100 <= RPM and RPM < 6100"
+      },
+      {
+        "symbol": "m_6",
+        "model_id": 0,
+        "guard": "6100 <= RPM and RPM < 7100"
+      },
+      {
+        "symbol": "m_7",
+        "model_id": 0,
+        "guard": "7100 <= RPM and RPM < 8100"
+      },
+      {
+        "symbol": "m_8",
+        "model_id": 0,
+        "guard": "8100 <= RPM and RPM < 9100"
+      },
+      {
+        "symbol": "m_9",
+        "model_id": 0,
+        "guard": "9100 <= RPM"
+      }
+    ],
+    "constants": {
+      "MIN_SPEED": 100,
+      "MAX_SPEED": 10000,
+      "SPEED_RANGE": 1000,
+      "PR_RANGE": 500
+    },
+    "trace_generation": {
+      "strategy": "CSV",
+      "csv": {
+        "wide_or_long": "wide",
+        "timestamp_column": "TimestampUTC",
+        "interpolate_method": "ffill",
+        "derive_columns": {
+          "HEADSTOCK__SPINDLE_DRIVE___1___ENERGY": {
+            "factor": 60,
+            "target": "POWER_kW"
+          }
+        },
+        "round_columns": {
+          "HEADSTOCK__SPINDLE_MOTOR___1___RPM": 100
+        }
+      },
+      "physics_constants": {
+        "tolerances": {
+          "RPM": 1000,
+          "PR": 500
+        }
+      }
+    }
+  }
+}

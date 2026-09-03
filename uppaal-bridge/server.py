@@ -44,10 +44,12 @@ TOKEN = os.environ.get("UPPAAL_BRIDGE_TOKEN", "")
 TIMEOUT = int(os.environ.get("UPPAAL_BRIDGE_TIMEOUT", "600"))
 MAX_BODY = 64 * 1024 * 1024
 
-# verifyta flags the trace generator is allowed to pass through. -t<n> selects
-# the trace type and is the only one lsha actually uses today; the rest are
-# harmless verification-mode switches kept so the shim stays a drop-in.
-ALLOWED_FLAG = re.compile(r"^-(t\d|s|q|u|A|S\d|E\d|C|H\d+|W|Y)$")
+# verifyta flags the callers are allowed to pass through. -t<n> selects the
+# trace type (dynamic_tracegenerator) and -r seeds the RNG (the legacy
+# resources/scripts/verify.sh). A bare integer is accepted so `-r <seed>` can
+# carry its value; the rest are harmless verification-mode switches kept so the
+# shim stays a drop-in.
+ALLOWED_FLAG = re.compile(r"^(-(t\d|r|s|q|u|A|S\d|E\d|C|H\d+|W|Y)|\d+)$")
 
 
 def _run_verifyta(model_text, query_text, args):

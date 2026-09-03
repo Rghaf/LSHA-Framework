@@ -1,0 +1,83 @@
+{
+  "name": "HRI-UPPAAL-V1",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "UPPAAL",
+  "driver_signal": [
+    "busy"
+  ],
+  "main_variable": "F",
+  "context_variables": [
+    "posX",
+    "posY"
+  ],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": false,
+  "user_json": {
+    "case_study": "HRI",
+    "version": "UPPAAL_V1",
+    "variables": [
+      {
+        "name": "F",
+        "source": "humanFatigue[currH - 1]",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "posX",
+        "source": "humanPositionX[currH - 1]",
+        "role": "context",
+        "type": "REAL"
+      },
+      {
+        "name": "busy",
+        "source": "amy.busy || amy.p_2",
+        "role": "driver",
+        "type": "INT"
+      },
+      {
+        "name": "posY",
+        "source": "humanPositionY[currH - 1]",
+        "role": "context",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Idle (idle_model, exp. decay)",
+        "type": "EXP_DECAY",
+        "estimator": "EXP_DECAY_RATE"
+      },
+      {
+        "id": 1,
+        "name": "Busy (busy_model, exp. growth)",
+        "type": "EXP_GROWTH",
+        "estimator": "EXP_GROWTH_SAT"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "u_1",
+        "model_id": 1,
+        "guard": "busy == 1"
+      },
+      {
+        "symbol": "d_1",
+        "model_id": 0,
+        "guard": "busy == 0"
+      }
+    ],
+    "constants": {},
+    "trace_generation": {
+      "strategy": "UPPAAL",
+      "max_length": 15
+    }
+  }
+}

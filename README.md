@@ -54,17 +54,25 @@ don't have it yet).
 ```bash
 cp .env.example .env        # edit values if needed — safe defaults are pre-filled
 
-docker compose up --build
+./run-stack.sh up --build
 ```
 
-That one command starts everything: Redis, the Django backend, the Celery worker,
-and the frontend. Which frontend you get is controlled by `COMPOSE_PROFILES` in
-`.env` (defaults to `dev` — Vite hot reload). To get the Nginx production build
-instead, either change `COMPOSE_PROFILES=prod` in `.env`, or override it for one run
-without editing the file:
+`run-stack.sh` is a thin wrapper around `docker compose` that also starts the
+native UPPAAL bridge first (see "UPPAAL support" below) and stops it again when
+you Ctrl-C the stack, so this one command really does start everything: Redis,
+the Django backend, the Celery worker, the frontend, and UPPAAL. Every other
+subcommand (`down`, `logs`, `ps`, `exec`, ...) passes straight through to
+`docker compose`, so `./run-stack.sh down` etc. work exactly as you'd expect.
+If you'd rather manage the bridge yourself, plain `docker compose up --build`
+still works unchanged.
+
+Which frontend you get is controlled by `COMPOSE_PROFILES` in `.env` (defaults
+to `dev` — Vite hot reload). To get the Nginx production build instead, either
+change `COMPOSE_PROFILES=prod` in `.env`, or override it for one run without
+editing the file:
 
 ```bash
-COMPOSE_PROFILES=prod docker compose up --build
+COMPOSE_PROFILES=prod ./run-stack.sh up --build
 ```
 
 - Backend API: http://localhost:8000
@@ -89,7 +97,7 @@ appear in the browser. Two ways to watch:
 interleaved in the terminal:
 
 ```bash
-docker compose up                 # Ctrl-C stops the stack
+./run-stack.sh up                 # Ctrl-C stops the stack (and the UPPAAL bridge)
 ```
 
 Or, when running detached (`-d`), follow one service:
@@ -149,12 +157,19 @@ check segfaults under containerisation regardless of privileges or mounts. It th
 runs natively on the host, and the container reaches it through a small HTTP bridge in
 [`uppaal-bridge/`](uppaal-bridge/).
 
-Activate the licence once on the host, then start the bridge before running UPPAAL
-case studies (THERMO, HRI):
+Activate the licence once on the host:
 
 ```bash
-/opt/uppaal/lib/app/bin/verifyta -k <your-licence-key>   # once
-./uppaal-bridge/run-bridge.sh                            # leave running
+/opt/uppaal/lib/app/bin/verifyta -k <your-licence-key>
+```
+
+`./run-stack.sh up --build` (see "Quick start" above) then starts the bridge for
+you automatically before bringing the stack up, and stops it again when the
+stack does. To run the bridge on its own — e.g. for `docker compose up` without
+the wrapper — start it by hand and leave it running in its own terminal:
+
+```bash
+./uppaal-bridge/run-bridge.sh
 ```
 
 See [`uppaal-bridge/README.md`](uppaal-bridge/README.md) for the full rationale,

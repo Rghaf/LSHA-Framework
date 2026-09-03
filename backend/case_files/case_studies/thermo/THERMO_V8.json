@@ -1,0 +1,108 @@
+{
+  "name": "THERMO-V8",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "UPPAAL",
+  "driver_signal": [
+    "t.ON"
+  ],
+  "main_variable": "T_r",
+  "context_variables": [
+    "r.open"
+  ],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": false,
+  "user_json": {
+    "case_study": "THERMO",
+    "version": "V8",
+    "variables": [
+      {
+        "name": "T_r",
+        "source": "T_r",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "t.ON",
+        "source": "t.ON",
+        "role": "driver",
+        "type": "INT"
+      },
+      {
+        "name": "r.open",
+        "source": "r.open",
+        "role": "context",
+        "type": "INT"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Heating (on_model, exp. growth)",
+        "type": "EXP_GROWTH",
+        "estimator": "EXP_GROWTH_NEWTON",
+        "time_constant": 100.0
+      },
+      {
+        "id": 1,
+        "name": "Cooling (off_model, exp. decay)",
+        "type": "EXP_DECAY",
+        "estimator": "EXP_DECAY_TAU"
+      },
+      {
+        "id": 2,
+        "name": "Heating alt (on_model_2, linear)",
+        "type": "LINEAR_GROWTH"
+      },
+      {
+        "id": 3,
+        "name": "Cooling alt (off_model_2, linear)",
+        "type": "LINEAR_DECAY"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "h_0",
+        "model_id": 0,
+        "guard": "t.ON == 1 and r.open == 0"
+      },
+      {
+        "symbol": "c_0",
+        "model_id": 1,
+        "guard": "t.ON == 0 and r.open == 0"
+      },
+      {
+        "symbol": "h_1",
+        "model_id": 0,
+        "guard": "t.ON == 1 and r.open == 1"
+      },
+      {
+        "symbol": "c_1",
+        "model_id": 1,
+        "guard": "t.ON == 0 and r.open == 1"
+      },
+      {
+        "symbol": "h_2",
+        "model_id": 0,
+        "guard": "t.ON == 1 and r.open == 2"
+      },
+      {
+        "symbol": "c_2",
+        "model_id": 1,
+        "guard": "t.ON == 0 and r.open == 2"
+      }
+    ],
+    "constants": {},
+    "trace_generation": {
+      "strategy": "UPPAAL",
+      "xml_force_variable": "force_open",
+      "max_length": 15
+    }
+  }
+}
