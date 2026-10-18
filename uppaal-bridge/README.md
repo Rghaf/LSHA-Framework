@@ -16,6 +16,11 @@ This was reproduced with, and is **not** fixed by:
 - bind-mounting the real `/opt/uppaal` and the activated licence directory
 - `--security-opt seccomp=unconfined`, `--security-opt apparmor=unconfined`
 - `--privileged`, `--pid=host`, full `/dev` and `/sys` mounts, `/etc/machine-id`
+- genuine namespace escape, not just device access: `--privileged --pid=host
+  --cgroupns=host --network=host --uts=host --ipc=host`, then `nsenter
+  --target 1 --mount --uts --ipc --net --pid --
+  /opt/uppaal/lib/app/bin/verifyta --version` — running the exact host binary,
+  in the host's real mount/PID/network namespaces. Still segfaults (exit 139).
 
 The same binary runs perfectly on the host. It is a defect in UPPAAL's
 proprietary licensing code, not a Docker misconfiguration — so instead of

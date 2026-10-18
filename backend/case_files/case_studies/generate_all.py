@@ -40,9 +40,26 @@ def base(name, strategy, drivers, main, context, user_json, aggregation=False, *
         "context_variables": context,
         **CFG,
         "is_aggregation": aggregation,
+        # Which entry of models[] the Teacher falls back to when mi_query is
+        # disabled — the reference's DEFAULT_M / DEFAULT_DISTR. Every case study
+        # except thermostat uses 0; it is written out explicitly so the value is
+        # visible and editable rather than assumed.
+        "default_model_id": 0,
+        "default_distribution_id": 0,
+        # Matches the reference for every case study except THERMO, which
+        # overrides this to "raw".
+        "ht_sample_mode": "replicated",
         "user_json": user_json,
     }
     doc.update(over)
+
+    # These are not columns on the CaseStudy model, so a multipart POST would
+    # drop them at the serializer. Mirror them inside user_json, which is stored
+    # verbatim and is what tasks.py reads. Keeping the top-level copy too means
+    # a future model field / UI control works without changing the generator.
+    doc["user_json"]["default_model_id"] = doc["default_model_id"]
+    doc["user_json"]["default_distribution_id"] = doc["default_distribution_id"]
+    doc["user_json"]["ht_sample_mode"] = doc["ht_sample_mode"]
     return doc
 
 
@@ -104,27 +121,35 @@ def thermo(version):
             {"id": 2, "name": "Cooling alt (off_model_2, linear)", "type": "LINEAR_DECAY"},
         ]
 
+    # ``trigger_value`` is the value the trace generator forces into the model's
+    # force_open[] array when it wants that event next (see
+    # dynamic_tracegenerator.build_event_strings). It must therefore be the
+    # r.open value that SATISFIES the event's own guard — otherwise UPPAAL is
+    # steered toward a state the guard rejects. Omitting it entirely encodes
+    # every entry as -1, i.e. "don't force", which leaves the learner with
+    # undirected random traces.
     if version == 1:
+        # V1 does not model the window at all; r.open stays 0 throughout.
         events = [
-            {"symbol": "h_0", "model_id": 0, "guard": "t.ON == 1"},
-            {"symbol": "c_0", "model_id": 1, "guard": "t.ON == 0"},
+            {"symbol": "h_0", "trigger_value": 0, "model_id": 0, "guard": "t.ON == 1"},
+            {"symbol": "c_0", "trigger_value": 0, "model_id": 1, "guard": "t.ON == 0"},
         ]
     elif version in THERMO_FOUR:
         # inverted branch: r.open == 1 selects the '!open' pair
         events = [
-            {"symbol": "h_0", "model_id": 0, "guard": "t.ON == 1 and r.open == 1"},
-            {"symbol": "c_0", "model_id": 1, "guard": "t.ON == 0 and r.open == 1"},
-            {"symbol": "h_1", "model_id": 0, "guard": "t.ON == 1 and r.open != 1"},
-            {"symbol": "c_1", "model_id": 1, "guard": "t.ON == 0 and r.open != 1"},
+            {"symbol": "h_0", "trigger_value": 1, "model_id": 0, "guard": "t.ON == 1 and r.open == 1"},
+            {"symbol": "c_0", "trigger_value": 1, "model_id": 1, "guard": "t.ON == 0 and r.open == 1"},
+            {"symbol": "h_1", "trigger_value": 0, "model_id": 0, "guard": "t.ON == 1 and r.open != 1"},
+            {"symbol": "c_1", "trigger_value": 0, "model_id": 1, "guard": "t.ON == 0 and r.open != 1"},
         ]
     else:  # 3, 8, 9, 10 — natural branch, three window states
         events = [
-            {"symbol": "h_0", "model_id": 0, "guard": "t.ON == 1 and r.open == 0"},
-            {"symbol": "c_0", "model_id": 1, "guard": "t.ON == 0 and r.open == 0"},
-            {"symbol": "h_1", "model_id": 0, "guard": "t.ON == 1 and r.open == 1"},
-            {"symbol": "c_1", "model_id": 1, "guard": "t.ON == 0 and r.open == 1"},
-            {"symbol": "h_2", "model_id": 0, "guard": "t.ON == 1 and r.open == 2"},
-            {"symbol": "c_2", "model_id": 1, "guard": "t.ON == 0 and r.open == 2"},
+            {"symbol": "h_0", "trigger_value": 0, "model_id": 0, "guard": "t.ON == 1 and r.open == 0"},
+            {"symbol": "c_0", "trigger_value": 0, "model_id": 1, "guard": "t.ON == 0 and r.open == 0"},
+            {"symbol": "h_1", "trigger_value": 1, "model_id": 0, "guard": "t.ON == 1 and r.open == 1"},
+            {"symbol": "c_1", "trigger_value": 1, "model_id": 1, "guard": "t.ON == 0 and r.open == 1"},
+            {"symbol": "h_2", "trigger_value": 2, "model_id": 0, "guard": "t.ON == 1 and r.open == 2"},
+            {"symbol": "c_2", "trigger_value": 2, "model_id": 1, "guard": "t.ON == 0 and r.open == 2"},
         ]
 
     return base(
@@ -144,8 +169,21 @@ def thermo(version):
                 "strategy": "UPPAAL",
                 "xml_force_variable": "force_open",
                 "max_length": 15,
+                # Fixes verifyta's RNG so the same configuration replays the
+                # same traces; remove to sample fresh traces each run.
+                "seed": 42,
             },
         },
+        # The reference's ht_s_query branches on `if CS == 'THERMO'`, feeding
+        # ks_2samp the raw metrics; every other case study gets the replicated
+        # + noised variant.
+        ht_sample_mode="raw",
+        # sul_definition.py: DEFAULT_M = 1, DEFAULT_DISTR = 1 — thermostat is the
+        # only case study that does not default to 0. With mi_query disabled the
+        # Teacher reports this flow on every location, so the reference renders
+        # f_1 (the cooling model) throughout.
+        default_model_id=1,
+        default_distribution_id=1,
     )
 
 
@@ -199,28 +237,34 @@ def hri(strategy, version):
     sit, run = _hri_regions(strategy)
     driver_expr = HRI_DRIVER_V12 if (strategy == "UPPAAL" and version in (1, 2)) else HRI_DRIVER_V3P
 
+    # ``trigger_value`` fills the model's force_act[] array (see
+    # dynamic_tracegenerator.build_event_strings). For HRI it selects the action
+    # channel the generator should force next: u_* = 'start' (0), d_* = 'stop'
+    # (1), matching the pre-existing hri_v1.json / hri_v5.json. Without it every
+    # entry is -1 and the generator cannot steer UPPAAL toward the word being
+    # refined.
     if strategy == "UPPAAL" and version == 1:
         events = [
-            {"symbol": "u_1", "model_id": 1, "guard": "busy == 1"},
-            {"symbol": "d_1", "model_id": 0, "guard": "busy == 0"},
+            {"symbol": "u_1", "trigger_value": 0, "model_id": 1, "guard": "busy == 1"},
+            {"symbol": "d_1", "trigger_value": 1, "model_id": 0, "guard": "busy == 0"},
         ]
     elif strategy == "UPPAAL" and version == 2:
         events = [
-            {"symbol": "u_1", "model_id": 1, "guard": f"busy == 1 and ({sit})"},
-            {"symbol": "d_1", "model_id": 0, "guard": f"busy == 0 and ({sit})"},
-            {"symbol": "u_2", "model_id": 1, "guard": "busy == 1"},
-            {"symbol": "d_2", "model_id": 0, "guard": "busy == 0"},
+            {"symbol": "u_1", "trigger_value": 0, "model_id": 1, "guard": f"busy == 1 and ({sit})"},
+            {"symbol": "d_1", "trigger_value": 1, "model_id": 0, "guard": f"busy == 0 and ({sit})"},
+            {"symbol": "u_2", "trigger_value": 0, "model_id": 1, "guard": "busy == 1"},
+            {"symbol": "d_2", "trigger_value": 1, "model_id": 0, "guard": "busy == 0"},
         ]
     else:
         # UPPAAL V3/4/5 and SIM V1/2/3 share the same three guard combinations:
         #   'sit!run', '!sitrun', '!sit!run'   ('sitrun' is not enumerated)
         events = [
-            {"symbol": "u_2", "model_id": 1, "guard": f"busy == 1 and ({sit}) and not ({run})"},
-            {"symbol": "d_2", "model_id": 0, "guard": f"busy == 0 and ({sit}) and not ({run})"},
-            {"symbol": "u_3", "model_id": 1, "guard": f"busy == 1 and not ({sit}) and ({run})"},
-            {"symbol": "d_3", "model_id": 0, "guard": f"busy == 0 and not ({sit}) and ({run})"},
-            {"symbol": "u_4", "model_id": 1, "guard": "busy == 1"},
-            {"symbol": "d_4", "model_id": 0, "guard": "busy == 0"},
+            {"symbol": "u_2", "trigger_value": 0, "model_id": 1, "guard": f"busy == 1 and ({sit}) and not ({run})"},
+            {"symbol": "d_2", "trigger_value": 1, "model_id": 0, "guard": f"busy == 0 and ({sit}) and not ({run})"},
+            {"symbol": "u_3", "trigger_value": 0, "model_id": 1, "guard": f"busy == 1 and not ({sit}) and ({run})"},
+            {"symbol": "d_3", "trigger_value": 1, "model_id": 0, "guard": f"busy == 0 and not ({sit}) and ({run})"},
+            {"symbol": "u_4", "trigger_value": 0, "model_id": 1, "guard": "busy == 1"},
+            {"symbol": "d_4", "trigger_value": 1, "model_id": 0, "guard": "busy == 0"},
         ]
 
     if strategy == "UPPAAL":
@@ -230,7 +274,15 @@ def hri(strategy, version):
             {"name": "busy", "source": driver_expr,                 "role": "driver",    "type": "INT"},
             {"name": "posY", "source": "humanPositionY[currH - 1]", "role": "context",   "type": "REAL"},
         ]
-        trace_gen = {"strategy": "UPPAAL", "max_length": 15}
+        trace_gen = {
+            "strategy": "UPPAAL",
+            # trace_gen.py's HRI branch patches `int force_act[MAX_E]`;
+            # force_open is THERMO's array and is the code default, so it must
+            # be stated explicitly here.
+            "xml_force_variable": "force_act",
+            "max_length": 15,
+            "seed": 42,
+        }
     else:
         variables = [
             {"name": "F",    "source": "humanFatigue",  "role": "estimated", "type": "REAL"},

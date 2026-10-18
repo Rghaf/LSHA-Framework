@@ -19,6 +19,9 @@
   "ht_query_type": "S",
   "eq_condition": "W",
   "is_aggregation": true,
+  "default_model_id": 0,
+  "default_distribution_id": 0,
+  "ht_sample_mode": "replicated",
   "user_json": {
     "case_study": "HRI",
     "version": "SIM_V1",
@@ -65,31 +68,37 @@
     "events": [
       {
         "symbol": "u_2",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1 and (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and not (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
       },
       {
         "symbol": "d_2",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0 and (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and not (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
       },
       {
         "symbol": "u_3",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1 and not (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
       },
       {
         "symbol": "d_3",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0 and not (16 <= posX and posX <= 23 and 1 <= posY and posY <= 10) and (1 <= posX and posX <= 11 and 1 <= posY and posY <= 10)"
       },
       {
         "symbol": "u_4",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1"
       },
       {
         "symbol": "d_4",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0"
       }
@@ -102,6 +111,9 @@
         "timestamp_column": "t",
         "interpolate_method": "ffill"
       }
-    }
+    },
+    "default_model_id": 0,
+    "default_distribution_id": 0,
+    "ht_sample_mode": "replicated"
   }
 }

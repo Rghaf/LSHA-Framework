@@ -18,6 +18,9 @@
   "ht_query_type": "S",
   "eq_condition": "W",
   "is_aggregation": false,
+  "default_model_id": 1,
+  "default_distribution_id": 1,
+  "ht_sample_mode": "raw",
   "user_json": {
     "case_study": "THERMO",
     "version": "V6",
@@ -59,21 +62,25 @@
     "events": [
       {
         "symbol": "h_0",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "t.ON == 1 and r.open == 1"
       },
       {
         "symbol": "c_0",
+        "trigger_value": 1,
         "model_id": 1,
         "guard": "t.ON == 0 and r.open == 1"
       },
       {
         "symbol": "h_1",
+        "trigger_value": 0,
         "model_id": 0,
         "guard": "t.ON == 1 and r.open != 1"
       },
       {
         "symbol": "c_1",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "t.ON == 0 and r.open != 1"
       }
@@ -82,7 +89,11 @@
     "trace_generation": {
       "strategy": "UPPAAL",
       "xml_force_variable": "force_open",
-      "max_length": 15
-    }
+      "max_length": 15,
+      "seed": 42
+    },
+    "default_model_id": 1,
+    "default_distribution_id": 1,
+    "ht_sample_mode": "raw"
   }
 }

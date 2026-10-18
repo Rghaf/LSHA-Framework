@@ -41,6 +41,10 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - UPPAAL_BRIDGE_URL=http://host.docker.internal:${UPPAAL_BRIDGE_PORT:-8899}
+      # Set to 1 to log get_segments fast/slow-path counters (see
+      # dynamic_sulfeatures.py). Off by default.
+      - LSHA_PROFILE_SEGMENTS=${LSHA_PROFILE_SEGMENTS:-0}
+      - LSHA_HT_DEBUG=${LSHA_HT_DEBUG:-0}
     volumes:
       - ./backend:/app
       - ./uppaal-bridge/verifyta:/opt/uppaal/lib/app/bin/verifyta:ro

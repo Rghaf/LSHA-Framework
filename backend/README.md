@@ -16,7 +16,7 @@ A **Django + Celery** web backend that wraps the **L\*SHA** (Learning Stochastic
 | `core_algorithm/skg_connector/` | Vendored Neo4j / knowledge-graph connector |
 | `core_algorithm/sha2dt_semantic_mapper/` | Vendored SHA → digital-twin mapper |
 
-> The four packages under `core_algorithm/` are **vendored in-tree** (not pip-installed). They are placed on `sys.path` at runtime by `core_algorithm/tasks.py`, so they travel with the git repository — no separate install step is required.
+> The four packages under `core_algorithm/` are **git submodules**, not pip-installed and not plain vendored files — see "Get the code" below, cloning without `--recurse-submodules` leaves them empty. Once populated, they're placed on `sys.path` at runtime by `core_algorithm/tasks.py`; no separate `pip install` step is needed for them specifically, but they do need the submodule checkout.
 
 ---
 
@@ -34,10 +34,19 @@ A **Django + Celery** web backend that wraps the **L\*SHA** (Learning Stochastic
 
 ### 1. Get the code
 
+`backend/` is a subdirectory of the `LSHA-framework` monorepo (sibling to
+`frontend/` and `uppaal-bridge/`), and the four packages under
+`core_algorithm/` are **git submodules** — a plain clone leaves those four
+directories empty and the Celery worker fails with `ModuleNotFoundError` as
+soon as a learning task starts. Clone recursively:
+
 ```bash
-git clone <your-repo-url> lsha_web
-cd lsha_web
+git clone --recurse-submodules <your-repo-url> LSHA-framework
+cd LSHA-framework/backend
 ```
+
+Already cloned without it? `git submodule update --init --recursive` from the
+repo root populates them after the fact.
 
 If migrating from another machine, also copy the runtime data that isn't reproducible from code:
 
@@ -149,27 +158,39 @@ frontend) from the repo root:
 ```bash
 cd ..                       # to LSHA-framework/
 cp .env.example .env        # first time only — edit as needed
-docker compose up --build   # dev profile by default; COMPOSE_PROFILES=prod for Nginx
+./run-stack.sh up --build   # dev profile by default; COMPOSE_PROFILES=prod for Nginx
 ```
 
 `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, and
 `DJANGO_ALLOWED_HOSTS` are all read from the environment (see `.env.example`), falling
 back to the same defaults used by the local dev workflow above.
 
-UPPAAL case studies additionally need the host-side bridge running
-(`./uppaal-bridge/run-bridge.sh`) — `verifyta` cannot execute inside a container. See
-the top-level `README.md` and `uppaal-bridge/README.md`.
+`run-stack.sh` starts the host-side UPPAAL bridge (`verifyta` cannot execute inside a
+container) alongside the stack in one command, and stops it again on Ctrl-C. Plain
+`docker compose up --build` still works if you'd rather manage the bridge yourself —
+start it separately with `./uppaal-bridge/run-bridge.sh`. See the top-level `README.md`
+and `uppaal-bridge/README.md`.
 
 ---
 
 ## Submitting case studies
 
-Helper scripts are included to post case studies to the running API:
+The current, actively-maintained way to run the bundled case studies is the harness
+under `case_files/case_studies/`, which also verifies reproducibility (each
+definition is posted twice and the reports compared):
 
 ```bash
-python post_all_case_studies.py   # posts the bundled UPPAAL + CSV case studies
-python post_green_cs.py           # posts the GREEN (energy) CSV case study
+python case_files/case_studies/run_all.py                       # every runnable definition, 2 reps each
+python case_files/case_studies/run_all.py --only THERMO_V1       # one definition
+python case_files/case_studies/run_all.py --fast                 # skip known-slow ones
 ```
+
+Every definition it runs, with its JSON and (where available) UPPAAL files, is also
+browsable under `../docs/case-studies/`.
+
+`post_all_case_studies.py` and `post_green_cs.py` (July 2026) predate this harness and
+post a fixed, older set of case studies directly — kept for now but not the
+recommended path; prefer `run_all.py` above.
 
 ---
 

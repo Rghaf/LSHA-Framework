@@ -34,7 +34,11 @@ import core_algorithm.lsha.sha_learning.pltr.sha_pltr as ha_pltr
 import core_algorithm.lsha.sha_learning.pltr.lsha_report as report
 
 from rest_api.models import CaseStudy, CsvFile
-from core_algorithm.lsha.sha_learning.domain.sulfeatures import SystemUnderLearning, RealValuedVar
+# SystemUnderLearning comes from our own module, not the submodule: it overrides
+# get_segments with a binary-search lookup that uses the `_secs` cache
+# CustomSignal attaches below. See dynamic_sulfeatures.py for the rationale.
+from core_algorithm.dynamic_sulfeatures import SystemUnderLearning
+from core_algorithm.lsha.sha_learning.domain.sulfeatures import RealValuedVar
 
 # --- NEW IMPORTS: The Extracted Modules ---
 from .dynamic_tracegenerator import CustomTraceGenerator
@@ -178,7 +182,8 @@ def run_lsha_learning_task(case_study_id):
             # whatever the DB stored (multipart form posts can lose boolean False).
             for _param in ('mi_query', 'plot_ddtw', 'ht_query', 'ht_query_type',
                            'eq_condition', 'n_min', 'p_value', 'noise',
-                           'is_aggregation'):
+                           'is_aggregation', 'ht_sample_mode',
+                           'default_model_id', 'default_distribution_id'):
                 if _param in outer_data:
                     json_params[_param] = outer_data[_param]
 
@@ -301,6 +306,61 @@ def run_lsha_learning_task(case_study_id):
             
         LOGGER.info(f"Generated Files Available for SUL: {generated_files}")
         _update_progress(case_study_id, current_step='BUILDING_MODEL')
+
+        # ----------------------------------------------------------
+        # Default flow / distribution.
+        #
+        # When mi_query is disabled the Teacher answers every
+        # model-identification query with ``self.flows[0][default_m]``, so this
+        # single value decides the flow reported on every location of the
+        # learned automaton. Each reference case study declares its own:
+        #
+        #     thermostat                                   DEFAULT_M = 1
+        #     hri / energy / energy_sim / energy_made /
+        #     gr3n / auto_twin                             DEFAULT_M = 0
+        #
+        # It is therefore read from the case study rather than hard-coded —
+        # hard-coding 0 silently mislabelled every THERMO location as f_0 where
+        # the reference reports f_1.
+        #
+        # The user supplies a model *id* (what they see in the "models" array);
+        # the SUL indexes ``flows[]`` positionally, so map id -> index here. An
+        # unknown id falls back to using the value as an index, and finally to
+        # 0, so a bad value degrades instead of raising.
+        def _resolve_default_index(raw_value, models):
+            try:
+                wanted = int(raw_value)
+            except (TypeError, ValueError):
+                return 0
+            for idx, m in enumerate(models):
+                try:
+                    if int(m.get('id')) == wanted:
+                        return idx
+                except (TypeError, ValueError):
+                    continue
+            if 0 <= wanted < len(models):
+                return wanted
+            LOGGER.warn(
+                f"default model/distribution id {raw_value!r} matches no entry in "
+                f"models[]; falling back to 0"
+            )
+            return 0
+
+        _models_cfg = data_dict.get('models', []) or []
+        _default_m_raw = json_params.get(
+            'default_model_id',
+            data_dict.get('default_model_id',
+                          getattr(cs_instance, 'default_model_id', 0)))
+        _default_d_raw = json_params.get(
+            'default_distribution_id',
+            data_dict.get('default_distribution_id',
+                          getattr(cs_instance, 'default_distribution_id', 0)))
+
+        DEFAULT_M = _resolve_default_index(_default_m_raw, _models_cfg)
+        DEFAULT_D = _resolve_default_index(_default_d_raw, _models_cfg)
+        LOGGER.info(f"DEFAULT FLOW INDEX: {DEFAULT_M} (from id={_default_m_raw!r}), "
+                    f"DEFAULT DISTR INDEX: {DEFAULT_D} (from id={_default_d_raw!r})")
+
         # ---------------------------------------------------------
         # PHASE 2: SUL FUNCTIONS TEST
         # ---------------------------------------------------------
@@ -308,8 +368,8 @@ def run_lsha_learning_task(case_study_id):
             'name': cs_instance.name,
             'resample_strategy': RESAMPLE_STRATEGY,          # <--- THE FIX: Explicitly pass the strategy
             'trace_generation': trace_gen_config,            # <--- THE FIX: Pass the JSON instructions
-            'default_m': 0,
-            'default_d': 0,
+            'default_m': DEFAULT_M,
+            'default_d': DEFAULT_D,
             'driver': DRIVER_SIGNAL,
             'main_var': MAIN_VARIABLE,
             'context_variables': CONTEXT_VARIABLES,
@@ -462,16 +522,31 @@ def run_lsha_learning_task(case_study_id):
                 return ideal_flow
 
             flows.append(FlowCondition(m_id, make_ideal_flow(m_type)))
-            m2d[m_id] = [m_id]
+            # Start with NO distributions attached to the flow, as every
+            # reference sul_definition does (`model_to_distr[m.f_id] = []`).
+            # add_distribution() appends the real ids as the Teacher creates
+            # them. Pre-seeding it with [m_id] invents a distribution that does
+            # not exist and, once ids start colliding with real ones, makes
+            # get_distr_for_flow offer another flow's distribution as a merge
+            # candidate.
+            m2d[m_id] = []
 
         rv_vars = [RealValuedVar(flows=flows, distr=[], m2d=m2d, label=MAIN_VARIABLE)]
         
         # SUL ADAPTERS
         class CustomPoint:
-            def __init__(self, t_obj, val):
+            # ``owner`` is the sig_dict of the trace this point came from.
+            # get_segments returns segments drawn from EVERY trace matching a
+            # word, so the parameter adapter cannot assume they all belong to
+            # the most recently parsed trace — it resolves each segment against
+            # its own trace via this back-reference.
+            __slots__ = ('timestamp', 't', 'value', 'owner')
+
+            def __init__(self, t_obj, val, owner=None):
                 self.timestamp = t_obj
                 self.t = t_obj
                 self.value = val
+                self.owner = owner
 
         class CustomSignal:
             def __init__(self, label, points):
@@ -527,7 +602,7 @@ def run_lsha_learning_task(case_study_id):
                 points = []
                 for i in range(len(t_floats)):
                     t_obj = Timestamp(0, 0, 0, 0, 0, float(t_floats[i]))
-                    points.append(CustomPoint(t_obj, v[i]))
+                    points.append(CustomPoint(t_obj, v[i], sig_dict))
                 res.append(CustomSignal(label, points))
             return res
 
@@ -614,11 +689,39 @@ def run_lsha_learning_task(case_study_id):
             'EXP_GROWTH', 'EXP_DECAY',
         }
 
+        def _model_def_for_flow(flow, args):
+            """Resolve the model definition for the flow the Teacher selected.
+
+            The reference implementation estimates a segment's parameter *for a
+            given flow* — ``get_thermo_param(segment, flow)`` branches on
+            ``flow.f_id``. Mirroring that here is what makes the two agree:
+            with mi_query disabled the Teacher hands back the SUL's default
+            flow for every prefix, so one estimator is applied throughout, and
+            with mi_query enabled each prefix uses its identified flow.
+
+            Returns None when the flow cannot be resolved, letting the caller
+            fall back to deriving the model from the event at the segment start.
+            """
+            f_id = getattr(flow, 'f_id', None)
+            if f_id is None:
+                return None
+            for m in (args.get('models') or []):
+                try:
+                    if int(m.get('id')) == int(f_id):
+                        return m
+                except (TypeError, ValueError):
+                    continue
+            return None
+
         def _flow_type_for(segment, args):
             """Look up the model TYPE (string) for the event active at the
             segment's start, by reusing the dynamic SUL's helpers.
-            Returns ``MEAN`` when nothing can be determined safely."""
-            sig_dict = args.get('__current_trace_cache__') or {}
+            Returns ``MEAN`` when nothing can be determined safely.
+
+            Only used when the Teacher's flow could not be resolved."""
+            # Same per-segment trace resolution as get_physics_param_adapter.
+            sig_dict = getattr(segment[0], 'owner', None) if len(segment) else None
+            sig_dict = sig_dict or args.get('__current_trace_cache__') or {}
             if not sig_dict:
                 return 'MEAN'
             try:
@@ -642,8 +745,19 @@ def run_lsha_learning_task(case_study_id):
             # legacy get_*_param functions do the same, and the teacher filters
             # with `[met for met in metrics if met is not None]`. Coercing to
             # 0.0 here silently averaged a zero into the distribution.
-            sig_dict = args.get('__current_trace_cache__')
-            if not sig_dict or len(segment) < 2:
+            if len(segment) < 2:
+                return None
+
+            # Resolve the segment against ITS OWN trace. get_segments returns
+            # one segment per trace matching the word, but
+            # `__current_trace_cache__` only ever holds the most recently parsed
+            # trace — so every segment from any other trace failed the timestamp
+            # lookup below and was discarded as None. That left exactly one
+            # usable metric per word, which makes ks_2samp degenerate
+            # (statistic == 1.0 for single-sample inputs), so no distribution
+            # could ever merge and every prefix became its own state.
+            sig_dict = getattr(segment[0], 'owner', None) or args.get('__current_trace_cache__')
+            if not sig_dict:
                 return None
 
             try:
@@ -654,12 +768,21 @@ def run_lsha_learning_task(case_study_id):
                 start_idx = np.where(sig_dict['time'] == start_t)[0][0]
                 end_idx = np.where(sig_dict['time'] == end_t)[0][0]
 
-                params = get_physics_param_dynamic(sig_dict, start_idx, end_idx, args=args)
+                # Estimate the parameter FOR THE FLOW the Teacher selected,
+                # matching the reference's get_*_param(segment, flow) contract.
+                # Falls back to the event-derived model only when the flow
+                # cannot be resolved against models[].
+                flow_model = _model_def_for_flow(flow, args)
 
-                # Decide which of {mean, rate} to report based on the model
-                # type of the event that fired at the segment start.  See
-                # _RATE_BASED_FLOWS comment above for the rationale.
-                flow_type = _flow_type_for(segment, args)
+                params = get_physics_param_dynamic(sig_dict, start_idx, end_idx,
+                                                   args=args, model_def=flow_model)
+
+                # Decide which of {mean, rate} to report from that same model.
+                # See _RATE_BASED_FLOWS comment above for the rationale.
+                if flow_model is not None:
+                    flow_type = (flow_model.get('type', 'MEAN') or 'MEAN').upper()
+                else:
+                    flow_type = _flow_type_for(segment, args)
 
                 val = None
                 if flow_type in _RATE_BASED_FLOWS and params.get('rate') is not None:
@@ -744,6 +867,18 @@ def run_lsha_learning_task(case_study_id):
             'eq_condition':   json_params.get('eq_condition',   getattr(cs_instance, 'eq_condition',   's')),
             'n_min':          json_params.get('n_min',          getattr(cs_instance, 'n_min',          10)),
             'is_aggregation': json_params.get('is_aggregation', getattr(cs_instance, 'is_aggregation', False)),
+            # 'raw' | 'replicated' — how ht_s_query samples for the KS test.
+            # See CustomTeacher.ht_sample_mode; THERMO is the only reference
+            # case study using 'raw'.
+            'ht_sample_mode': json_params.get(
+                'ht_sample_mode',
+                data_dict.get('ht_sample_mode', 'replicated')),
+            # Same seed that drives `verifyta -r`, reused to seed the RNG behind
+            # the HT query's noise. The reference leaves that RNG unseeded, so
+            # its merge decisions — and therefore the learned automaton — differ
+            # between runs on identical input. Threading the seed through makes
+            # noise>0 reproducible; None keeps the reference's behaviour.
+            'seed': trace_gen_config.get('seed'),
         }
 
         teacher = CustomTeacher(

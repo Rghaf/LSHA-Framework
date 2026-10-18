@@ -3,7 +3,7 @@ import { toast } from "react-toastify";
 import Input from "../../inputs/Input";
 import { CustomCsContext } from "../../../contexts/CustomCsContext";
 import { parseUppaalQuery } from "../../../functions/ParseUppaal";
-import { parseCSV } from "../../../functions/ParseCSV";
+import { parseCSV, parseCSVLongFormatFields } from "../../../functions/ParseCSV";
 
 export default function FormPage1({ handleBtnDisabled }) {
   const [touched, setTouched] = useState({});
@@ -13,6 +13,10 @@ export default function FormPage1({ handleBtnDisabled }) {
   const [uppaalModelFile, setUppaalModelFile] = useState(null);
   const [uppaalQueryFile, setUppaalQueryFile] = useState(null);
   const [CSVFile, setCSVFile] = useState(null);
+  const [csvFormat, setCsvFormat] = useState("wide");
+  const [csvFieldColumn, setCsvFieldColumn] = useState("DataObjectField");
+  const [csvValueColumn, setCsvValueColumn] = useState("Value");
+  const [csvTimestampColumn, setCsvTimestampColumn] = useState("TimeStamp");
   const { customCsState, customCsDispatch } = useContext(CustomCsContext);
 
   // The set of selectable driver/main/context variables comes from whichever
@@ -71,6 +75,10 @@ export default function FormPage1({ handleBtnDisabled }) {
     if (customCsState.csvFile) {
       setCSVFile(customCsState.csvFile);
     } else setCSVFile(null);
+    setCsvFormat(customCsState.csvFormat === "long" ? "long" : "wide");
+    setCsvFieldColumn(customCsState.csvFieldColumn || "DataObjectField");
+    setCsvValueColumn(customCsState.csvValueColumn || "Value");
+    setCsvTimestampColumn(customCsState.csvTimestampColumn || "TimeStamp");
   }, [
     customCsState.name,
     customCsState.email,
@@ -78,6 +86,10 @@ export default function FormPage1({ handleBtnDisabled }) {
     customCsState.uppaalModelFile,
     customCsState.uppaalQueryFile,
     customCsState.csvFile,
+    customCsState.csvFormat,
+    customCsState.csvFieldColumn,
+    customCsState.csvValueColumn,
+    customCsState.csvTimestampColumn,
   ]);
 
   useEffect(() => {
@@ -155,41 +167,120 @@ export default function FormPage1({ handleBtnDisabled }) {
       type: "UPDATE_FIELD",
       payload: { key: "csvFile", value },
     });
-
-    // Read the file content and parse it
-    const file = getPrimaryFile(fileOrFiles);
-    if (file && file.name.toLowerCase().endsWith(".csv")) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const text = e.target.result || "";
-          const variables = parseCSV(text); // Pass text, not file
-
-          if (variables.length === 0) {
-            toast.error(
-              "Could not find any columns in that CSV — check the file has a header row.",
-              { theme: "colored" },
-            );
-          }
-
-          customCsDispatch({
-            type: "UPDATE_FIELD",
-            payload: { key: "csvHeaders", value: variables },
-          });
-          resetSelectedVariables();
-        } catch (err) {
-          console.error("Failed to parse CSV:", err);
-          toast.error(`Could not read that CSV file: ${err.message}`, {
-            theme: "colored",
-          });
-        }
-      };
-      reader.onerror = () => {
-        toast.error("Could not read that CSV file.", { theme: "colored" });
-      };
-      reader.readAsText(file);
-    }
+    // Actual parsing happens in the effect below, keyed on csvFile/csvFormat/
+    // csvFieldColumn, so it also re-runs when the user tweaks the CSV-layout
+    // settings after files are already selected, not just on file-select.
   }
+
+  function handleCsvFormat(e) {
+    const value = e.target.value;
+    setCsvFormat(value);
+    customCsDispatch({
+      type: "UPDATE_FIELD",
+      payload: { key: "csvFormat", value },
+    });
+  }
+
+  function handleCsvFieldColumn(e) {
+    const value = e.target.value;
+    setCsvFieldColumn(value);
+    customCsDispatch({
+      type: "UPDATE_FIELD",
+      payload: { key: "csvFieldColumn", value },
+    });
+  }
+
+  function handleCsvValueColumn(e) {
+    const value = e.target.value;
+    setCsvValueColumn(value);
+    customCsDispatch({
+      type: "UPDATE_FIELD",
+      payload: { key: "csvValueColumn", value },
+    });
+  }
+
+  function handleCsvTimestampColumn(e) {
+    const value = e.target.value;
+    setCsvTimestampColumn(value);
+    customCsDispatch({
+      type: "UPDATE_FIELD",
+      payload: { key: "csvTimestampColumn", value },
+    });
+  }
+
+  function readFileAsText(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(String(e.target.result || ""));
+      reader.onerror = () => resolve(null);
+      reader.readAsText(file);
+    });
+  }
+
+  // Re-extracts the selectable variable list whenever the CSV file(s) OR the
+  // wide/long format setting OR (for long format) the field-column name
+  // change — debounced so typing a custom field-column name doesn't re-read
+  // every uploaded file on every keystroke. For "wide", each file's header
+  // row contributes columns; for "long", each file's unique values in
+  // csvFieldColumn contribute variable names. Both branches union across
+  // every uploaded file, since GREEN-style datasets split real-value and
+  // alarm/status signals across separate files that must be merged.
+  useEffect(() => {
+    if (resampleStrategy !== "SIM") return;
+
+    const files = getFiles(customCsState.csvFile).filter(
+      (f) => f && f.name && f.name.toLowerCase().endsWith(".csv"),
+    );
+    if (files.length === 0) return;
+
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      const texts = await Promise.all(files.map(readFileAsText));
+      if (cancelled) return;
+
+      const failedReads = texts.filter((t) => t === null).length;
+      if (failedReads > 0) {
+        toast.error(
+          `Could not read ${failedReads} of the selected CSV file(s).`,
+          { theme: "colored" },
+        );
+      }
+
+      const union = new Set();
+      texts
+        .filter((t) => t !== null)
+        .forEach((text) => {
+          const vars =
+            csvFormat === "long"
+              ? parseCSVLongFormatFields(text, csvFieldColumn || "DataObjectField")
+              : parseCSV(text);
+          vars.forEach((v) => union.add(v));
+        });
+      const variables = Array.from(union).sort();
+
+      if (variables.length === 0) {
+        toast.error(
+          csvFormat === "long"
+            ? `No values found in the "${csvFieldColumn}" column — check the field-column name matches your CSV's header.`
+            : "Could not find any columns in that CSV — check the file has a header row.",
+          { theme: "colored" },
+        );
+      }
+
+      customCsDispatch({
+        type: "UPDATE_FIELD",
+        payload: { key: "csvHeaders", value: variables },
+      });
+      resetSelectedVariables();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customCsState.csvFile, csvFormat, csvFieldColumn, resampleStrategy]);
 
   // File handlers - save File object to context
   function handleUppaalModelFile(fileOrFiles) {
@@ -334,6 +425,48 @@ export default function FormPage1({ handleBtnDisabled }) {
             <p className="text-sm text-gray-500 dark:text-gray-400">
               At least one CSV file is required.
             </p>
+          )}
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            If your data is split across multiple files (e.g. separate
+            real-value and alarm/status exports), select them all together —
+            they'll be merged automatically.
+          </p>
+
+          <Input
+            type="select"
+            title="CSV layout"
+            description={
+              '"Wide": each column is a variable (most exports). "Long": every row is (object, field, value, timestamp) and the field values become the variable names — used by SCADA-style exports like GREEN.'
+            }
+            value={csvFormat}
+            options={["wide", "long"]}
+            handleChange={handleCsvFormat}
+          />
+
+          {csvFormat === "long" && (
+            <>
+              <Input
+                type="text"
+                title="Field column name"
+                description="Column whose values are the variable names (e.g. DataObjectField)."
+                value={csvFieldColumn}
+                handleChange={handleCsvFieldColumn}
+              />
+              <Input
+                type="text"
+                title="Value column name"
+                description="Column holding each sample's numeric value (e.g. Value)."
+                value={csvValueColumn}
+                handleChange={handleCsvValueColumn}
+              />
+              <Input
+                type="text"
+                title="Timestamp column name"
+                description="Column holding each sample's timestamp (e.g. TimeStamp or time)."
+                value={csvTimestampColumn}
+                handleChange={handleCsvTimestampColumn}
+              />
+            </>
           )}
         </>
       )}

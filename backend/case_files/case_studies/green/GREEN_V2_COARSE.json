@@ -17,6 +17,9 @@
   "ht_query_type": "S",
   "eq_condition": "W",
   "is_aggregation": true,
+  "default_model_id": 0,
+  "default_distribution_id": 0,
+  "ht_sample_mode": "replicated",
   "user_json": {
     "case_study": "GREEN",
     "version": "V2-COARSE",
@@ -123,6 +126,9 @@
           "tmp": 5
         }
       }
-    }
+    },
+    "default_model_id": 0,
+    "default_distribution_id": 0,
+    "ht_sample_mode": "replicated"
   }
 }

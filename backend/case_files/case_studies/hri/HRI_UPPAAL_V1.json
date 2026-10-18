@@ -19,6 +19,9 @@
   "ht_query_type": "S",
   "eq_condition": "W",
   "is_aggregation": false,
+  "default_model_id": 0,
+  "default_distribution_id": 0,
+  "ht_sample_mode": "replicated",
   "user_json": {
     "case_study": "HRI",
     "version": "UPPAAL_V1",
@@ -65,11 +68,13 @@
     "events": [
       {
         "symbol": "u_1",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1"
       },
       {
         "symbol": "d_1",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0"
       }
@@ -77,7 +82,12 @@
     "constants": {},
     "trace_generation": {
       "strategy": "UPPAAL",
-      "max_length": 15
-    }
+      "xml_force_variable": "force_act",
+      "max_length": 15,
+      "seed": 42
+    },
+    "default_model_id": 0,
+    "default_distribution_id": 0,
+    "ht_sample_mode": "replicated"
   }
 }

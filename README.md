@@ -44,6 +44,11 @@ Celery worker raises `ModuleNotFoundError` as soon as a learning task starts.
 > from version control. The UPPAAL models, the case-study JSON configs and the
 > test suite **are** tracked, so the case studies remain runnable after a clone.
 
+Every shipped case study, one directory per version, each with its JSON and
+(where available) its UPPAAL model and query, is browsable under
+[`docs/case-studies/`](docs/case-studies/README.md) — a worked-example index of
+the `POST /api/case-study/` request format alongside the actual definitions.
+
 ---
 
 ## Quick start

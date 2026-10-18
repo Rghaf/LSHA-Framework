@@ -1,0 +1,123 @@
+{
+  "name": "GREEN-V4-CROSSING",
+  "email": "reza.ghadiri.1998@gmail.com",
+  "resample_strategy": "CSV",
+  "driver_signal": [
+    "ab",
+    "tr"
+  ],
+  "main_variable": "Ta",
+  "context_variables": [],
+  "noise": 0.0,
+  "n_min": 1,
+  "p_value": 0.05,
+  "mi_query": false,
+  "plot_ddtw": false,
+  "ht_query": true,
+  "ht_query_type": "S",
+  "eq_condition": "W",
+  "is_aggregation": true,
+  "default_model_id": 0,
+  "default_distribution_id": 0,
+  "user_json": {
+    "case_study": "GREEN",
+    "version": "V4-CROSSING",
+    "variables": [
+      {
+        "name": "Ta",
+        "source": "TCuscinettiAlimentazione",
+        "role": "estimated",
+        "type": "REAL"
+      },
+      {
+        "name": "ab",
+        "source": "Assorbimento",
+        "role": "driver",
+        "type": "REAL"
+      },
+      {
+        "name": "tr",
+        "source": "TCuscinettiRiduttore",
+        "role": "driver",
+        "type": "REAL"
+      }
+    ],
+    "models": [
+      {
+        "id": 0,
+        "name": "Absorption (modello_assorbimento)",
+        "type": "MEAN"
+      }
+    ],
+    "events": [
+      {
+        "symbol": "ab_0",
+        "model_id": 0,
+        "guard": "(0 <= ab and ab < 50) and not (0 <= prev_ab and prev_ab < 50)"
+      },
+      {
+        "symbol": "ab_1",
+        "model_id": 0,
+        "guard": "(50 <= ab and ab < 100) and not (50 <= prev_ab and prev_ab < 100)"
+      },
+      {
+        "symbol": "ab_2",
+        "model_id": 0,
+        "guard": "(100 <= ab and ab < 150) and not (100 <= prev_ab and prev_ab < 150)"
+      },
+      {
+        "symbol": "ab_3",
+        "model_id": 0,
+        "guard": "(150 <= ab) and not (150 <= prev_ab)"
+      },
+      {
+        "symbol": "tr_4",
+        "model_id": 0,
+        "guard": "(0 <= tr and tr < 20) and not (0 <= prev_tr and prev_tr < 20)"
+      },
+      {
+        "symbol": "tr_5",
+        "model_id": 0,
+        "guard": "(20 <= tr and tr < 40) and not (20 <= prev_tr and prev_tr < 40)"
+      },
+      {
+        "symbol": "tr_6",
+        "model_id": 0,
+        "guard": "(40 <= tr and tr < 60) and not (40 <= prev_tr and prev_tr < 60)"
+      },
+      {
+        "symbol": "tr_7",
+        "model_id": 0,
+        "guard": "(60 <= tr) and not (60 <= prev_tr)"
+      },
+      {
+        "symbol": "s",
+        "model_id": 0,
+        "guard": ""
+      }
+    ],
+    "constants": {
+      "AB_RANGE": 50,
+      "TR_RANGE": 20
+    },
+    "trace_generation": {
+      "strategy": "CSV",
+      "csv": {
+        "wide_or_long": "long",
+        "timestamp_column": "time",
+        "field_column": "DataObjectField",
+        "value_column": "Value",
+        "interpolate_method": "linear",
+        "bundle_all_csv": true
+      },
+      "physics_constants": {
+        "tolerances": {
+          "ab": 50,
+          "tr": 20
+        }
+      }
+    },
+    "default_model_id": 0,
+    "default_distribution_id": 0
+  }
+}

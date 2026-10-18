@@ -175,6 +175,19 @@ class CustomTraceGenerator:
         self.xml_force_var = self.config.get('xml_force_variable', 'force_open')
         self.xml_action_var = self.config.get('xml_action_variable', 'force_exe')
 
+        # Optional RNG seed making UPPAAL trace generation deterministic, so
+        # the same configuration reproduces the same traces (and therefore the
+        # same learned automaton) on every run. None = seed from OS entropy,
+        # which is the historical behaviour.
+        _seed = self._csv_cfg.get('seed', self.config.get('seed'))
+        try:
+            self.seed = None if _seed is None else int(_seed)
+        except (TypeError, ValueError):
+            print(f"[TraceGen] ignoring non-integer seed {_seed!r}")
+            self.seed = None
+        if self.seed is not None:
+            print(f"[TraceGen] deterministic mode, seed={self.seed}")
+
         # Set later by ``set_word`` — the prefix word the Teacher wants the
         # next batch of UPPAAL simulations to begin with.
         self.word = None
@@ -350,8 +363,28 @@ class CustomTraceGenerator:
         os.makedirs(self.output_dir, exist_ok=True)
 
         for i in range(n):
-            random.seed()
-            n_rand = random.randint(0, 2 ** 32)
+            # Trace generation is the only source of run-to-run variation:
+            # verifyta is a *statistical* model checker and seeds itself from
+            # the wall clock, and `random.seed()` with no argument reseeds from
+            # OS entropy. Two runs of the same case study therefore see
+            # different traces and learn different automata.
+            #
+            # When `trace_generation.seed` is set, derive a deterministic seed
+            # per call instead and hand it to verifyta with `-r`, so the same
+            # configuration replays the same traces. Left unset, behaviour is
+            # unchanged (fresh entropy every call).
+            if self.seed is None:
+                random.seed()
+                n_rand = random.randint(0, 2 ** 32)
+                uppaal_seed = None
+            else:
+                # Vary per call so successive refinements still explore, while
+                # the whole sequence stays a pure function of the configured
+                # seed. uppaal_call_counter has already been incremented above.
+                n_rand = (int(self.seed) * 1_000_003
+                          + self.uppaal_call_counter * 10_007
+                          + i) % (2 ** 32)
+                uppaal_seed = n_rand
 
             trace_filename = f"{self.cs_name}_trace_{n_rand}.txt"
             final_path = os.path.join(self.output_dir, trace_filename)
@@ -362,6 +395,9 @@ class CustomTraceGenerator:
                 self.uppaal_model_path,
                 self.uppaal_query_path
             ]
+            if uppaal_seed is not None:
+                # verifyta's own RNG seed; the shim forwards -r to the bridge.
+                cmd += ['-r', str(uppaal_seed)]
 
             print(f"[TraceGen] Executing Command: {' '.join(cmd)}")
 

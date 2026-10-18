@@ -1342,10 +1342,24 @@ def label_event_dynamic(signals, index, args=None):
 # PHYSICS PARAMETER EXTRACTION
 # ===========================================================================
 
-def get_physics_param_dynamic(signals, start_i, end_i, args=None):
+def get_physics_param_dynamic(signals, start_i, end_i, args=None, model_def=None):
     """
     Extract a scalar physics parameter that characterises a signal segment.
 
+    ``model_def`` lets the caller state which flow the parameter should be
+    estimated *for*. The reference implementation works this way — its
+    ``get_thermo_param(segment, flow)`` / ``get_ftg_param(segment, flow)``
+    branch on ``flow.f_id``, i.e. on the flow the Teacher's model-identification
+    query selected. Passing it here keeps that contract:
+
+      * mi_query disabled -> the Teacher returns the SUL's default flow for
+        every prefix, so every segment is measured with that one estimator,
+        exactly as the reference does;
+      * mi_query enabled  -> each prefix is measured with its identified flow.
+
+    When ``model_def`` is None the model is derived from the event active at the
+    segment start, which is the only option available to callers that have no
+    flow in hand (e.g. the PHASE 2 smoke test).
     """
     default = {'mean': 0.0, 'rate': 0.0}
 
@@ -1360,7 +1374,8 @@ def get_physics_param_dynamic(signals, start_i, end_i, args=None):
     mean_val = float(np.mean(segment))
 
     # Determine the flow model for this segment
-    model_def = _get_model_def_for_segment(signals, start_i, args)
+    if model_def is None:
+        model_def = _get_model_def_for_segment(signals, start_i, args)
     model_type = (model_def.get('type', 'MEAN') or 'MEAN').upper()
 
     # A model may name a case-study-faithful estimator; when it does, that wins

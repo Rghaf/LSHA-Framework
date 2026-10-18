@@ -19,6 +19,9 @@
   "ht_query_type": "S",
   "eq_condition": "W",
   "is_aggregation": false,
+  "default_model_id": 0,
+  "default_distribution_id": 0,
+  "ht_sample_mode": "replicated",
   "user_json": {
     "case_study": "HRI",
     "version": "UPPAAL_V3",
@@ -65,31 +68,37 @@
     "events": [
       {
         "symbol": "u_2",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1 and (posX >= 2000 and posY <= 3000) and not (posX >= 2000 and 1000 <= posY and posY <= 3000)"
       },
       {
         "symbol": "d_2",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0 and (posX >= 2000 and posY <= 3000) and not (posX >= 2000 and 1000 <= posY and posY <= 3000)"
       },
       {
         "symbol": "u_3",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1 and not (posX >= 2000 and posY <= 3000) and (posX >= 2000 and 1000 <= posY and posY <= 3000)"
       },
       {
         "symbol": "d_3",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0 and not (posX >= 2000 and posY <= 3000) and (posX >= 2000 and 1000 <= posY and posY <= 3000)"
       },
       {
         "symbol": "u_4",
+        "trigger_value": 0,
         "model_id": 1,
         "guard": "busy == 1"
       },
       {
         "symbol": "d_4",
+        "trigger_value": 1,
         "model_id": 0,
         "guard": "busy == 0"
       }
@@ -97,7 +106,12 @@
     "constants": {},
     "trace_generation": {
       "strategy": "UPPAAL",
-      "max_length": 15
-    }
+      "xml_force_variable": "force_act",
+      "max_length": 15,
+      "seed": 42
+    },
+    "default_model_id": 0,
+    "default_distribution_id": 0,
+    "ht_sample_mode": "replicated"
   }
 }

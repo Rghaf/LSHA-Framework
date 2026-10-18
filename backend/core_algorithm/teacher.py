@@ -19,6 +19,10 @@ from .dynamic_obstable import ObsTable, Row, State
 
 LOGGER = Logger('TEACHER')
 
+# Opt-in HT-query tracing (LSHA_HT_DEBUG=1): shows how many segments/metrics
+# each word yields and why a merge was or was not accepted.
+_HT_DEBUG = os.environ.get('LSHA_HT_DEBUG') == '1'
+
 # config = configparser.ConfigParser()
 # config.read(
 #     os.path.dirname(os.path.abspath(__file__)).split('sha_learning')[0] + 'sha_learning/resources/config/config.ini')
@@ -95,6 +99,34 @@ class CustomTeacher:
         self.n_min = int(self.config.get('n_min', 10))
         self.is_aggregation = self.config.get('is_aggregation', False)
 
+        # How ht_s_query feeds ks_2samp.
+        #
+        #   'raw'        : v1 = the word's metrics, v2 = the distribution's
+        #                  history, both unmodified and unnoised.
+        #   'replicated' : v1 = [mean] * 50, v2 = each historical metric * 10,
+        #                  both jittered by `noise`.
+        #
+        # The reference selects between these with a literal
+        # `if CS == 'THERMO'`, i.e. THERMO uses 'raw' and every other case study
+        # uses 'replicated'. `is_aggregation` was standing in for that test, but
+        # it only coincides for THERMO/ENERGY/GREEN — HRI also has
+        # is_aggregation=False yet the reference gives it the 'replicated'
+        # branch. Making it an explicit field avoids guessing from an unrelated
+        # flag; default 'replicated' matches every case study but THERMO.
+        self.ht_sample_mode = str(
+            self.config.get('ht_sample_mode', 'replicated')).strip().lower()
+
+        # RNG for the HT query's noise term. The reference calls the module-level
+        # np.random, which is seeded from the OS entropy pool, so two runs on the
+        # same input take different merge decisions and learn different automata.
+        # A private Generator seeded from the case study's trace seed keeps
+        # noise>0 behaviour while making it repeatable, and avoids disturbing
+        # global numpy state that other parts of the pipeline may rely on.
+        # seed=None reproduces the reference's unseeded behaviour.
+        _seed = self.config.get('seed')
+        self.seed = None if _seed is None else int(_seed)
+        self._rng = np.random.default_rng(self.seed)
+
         # --- LOGGING TO VERIFY DATABASE VALUES ---
         LOGGER.info("========================================")
         LOGGER.info("TEACHER HYPERPARAMETERS LOADED:")
@@ -106,6 +138,8 @@ class CustomTeacher:
         LOGGER.info(f"  HT Query Type   : {self.ht_query_type}")
         LOGGER.info(f"  Eq Condition    : {self.eq_condition}")
         LOGGER.info(f"  N Min (Refine)  : {self.n_min}")
+        LOGGER.info(f"  HT Sample Mode  : {self.ht_sample_mode}")
+        LOGGER.info(f"  HT Noise Seed   : {self.seed}")
         LOGGER.info("========================================")
 
         # System-Dependent Attributes
@@ -252,6 +286,23 @@ class CustomTeacher:
 
 
     # ROUTER: Sends the query to Deterministic or Stochastic based on the UI settings
+    def _default_distribution(self):
+        """The SUL's default ProbDistribution, or None if none exists yet.
+
+        ``self.distributions`` is ``[v.distr for v in sul.vars]`` — a list *per
+        variable* — so it must be indexed as ``[0][default_d]``, mirroring how
+        ``mi_query`` uses ``self.flows[0][default_m]``. Indexing it as
+        ``self.distributions[default_d]`` returns the whole distribution list
+        for variable 0; that list then reaches the observation table in the
+        distribution slot and the automaton renderer emits a raw Python repr
+        (``f_0, [<ProbDistribution object at 0x...>]``), which graphviz rejects
+        with "not well-formed (invalid token)".
+        """
+        per_var = self.distributions[0] if self.distributions else []
+        if 0 <= self.sul.default_d < len(per_var):
+            return per_var[self.sul.default_d]
+        return per_var[0] if per_var else None
+
     def ht_query(self, word: Trace, flow: FlowCondition, save=True):
         """
         HYPOTHESIS-TESTING query — pick the probability distribution that
@@ -274,7 +325,7 @@ class CustomTeacher:
             return None
 
         if not self.ht_query_flag or word == '':
-            return self.distributions[self.sul.default_d]
+            return self._default_distribution()
 
         if self.ht_query_type == 'D':
             return self.ht_d_query(word, flow, save)
@@ -295,7 +346,7 @@ class CustomTeacher:
             metrics = [self.sul.get_ht_params(segment, flow) for segment in segments]
             metrics = [met for met in metrics if met is not None]
             if not metrics:
-                return self.distributions[self.sul.default_d]
+                return self._default_distribution()
             unique_metrics = list(set(metrics))
 
             if len(unique_metrics) > 1:
@@ -344,6 +395,8 @@ class CustomTeacher:
 
     def ht_s_query(self, word: Trace, flow: FlowCondition, save=True):
         segments = self.sul.get_segments(word)
+        if _HT_DEBUG:
+            print(f"[HTDBG] word='{word}' segments={len(segments)}", flush=True)
         if len(segments) > 0:
             # distr associated with selected flow
             eligible_distributions = self.sul.vars[0].get_distr_for_flow(flow.f_id)
@@ -356,8 +409,13 @@ class CustomTeacher:
             # create. Fall back to the SUL's default rather than dividing by
             # zero on the mean below.
             if not metrics:
-                return self.distributions[self.sul.default_d]
+                return self._default_distribution()
             avg_metrics = sum(metrics) / len(metrics)
+
+            if _HT_DEBUG:
+                print(f"[HTDBG]   metrics(n={len(metrics)})={[round(m,4) for m in metrics][:6]} "
+                      f"eligible={len(eligible_distributions)} hist_keys={list(self.hist)}",
+                      flush=True)
 
             min_dist, best_fit = 1000, None
 
@@ -366,14 +424,14 @@ class CustomTeacher:
                     if len(self.hist[distr]) == 0 or len(metrics) == 0:
                         continue
                     # change is aggregation to need to fill out
-                    if not self.is_aggregation:
+                    if self.ht_sample_mode == 'raw':
                         v1 = metrics
                         noise1 = [0] * len(v1)
                     else:
                         v1 = [avg_metrics] * 50
                         # When noise=0 skip the RNG entirely to guarantee
                         # deterministic results for the same input data.
-                        noise1 = (np.random.normal(0.0, self.noise, size=len(v1))
+                        noise1 = (self._rng.normal(0.0, self.noise, size=len(v1))
                                   if self.noise > 0 else np.zeros(len(v1)))
 
                     v1 = [x + noise1[i] for i, x in enumerate(v1)]
@@ -393,18 +451,21 @@ class CustomTeacher:
                     # ks_2samp, equivalent segments fail to merge, and each one
                     # spawns a fresh distribution — e.g. THERMO V1 reported
                     # 0.699900 and 0.700100 as two distributions instead of one.
-                    if not self.is_aggregation:
+                    if self.ht_sample_mode == 'raw':
                         v2 = self.hist[distr]
                         noise2 = [0] * len(v2)
                     else:
                         for m in self.hist[distr]:
                             v2 += [m] * 10
-                        noise2 = (np.random.normal(0.0, self.noise, size=len(v2))
+                        noise2 = (self._rng.normal(0.0, self.noise, size=len(v2))
                                   if self.noise > 0 else np.zeros(len(v2)))
                     v2 = [x + noise2[i] for i, x in enumerate(v2)]
 
                     # P_VALUE => self.p_value
                     statistic, pvalue = stats.ks_2samp(v1, v2)
+                    if _HT_DEBUG:
+                        print(f"[HTDBG]     vs D_{distr}: |v1|={len(v1)} |v2|={len(v2)} "
+                              f"stat={statistic:.3f} p={pvalue:.3f}", flush=True)
                     fits = [d for d in eligible_distributions if d.d_id == distr]
                     if statistic <= min_dist and pvalue >= self.p_value and len(fits) > 0:
                         min_dist = statistic

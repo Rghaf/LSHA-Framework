@@ -16,6 +16,16 @@ const initialState = {
   uppaalQueryFile: null,
   csvFile: null,
 
+  // CSV shape for the SIM strategy: "wide" (each column IS a variable, e.g.
+  // ENERGY's exports) or "long" (variable names live as VALUES inside one
+  // column, e.g. GREEN's SCADA dumps: DataObjectName/DataObjectField/Value/
+  // TimeStamp). The column names below only matter when csvFormat is "long";
+  // their defaults match the backend's own defaults in dynamic_sul.py.
+  csvFormat: "wide",
+  csvFieldColumn: "DataObjectField",
+  csvValueColumn: "Value",
+  csvTimestampColumn: "TimeStamp",
+
   // extracted data from uploaded files
   csvHeaders: null,
   uppaalQuery: null,
