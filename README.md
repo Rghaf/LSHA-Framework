@@ -1,225 +1,223 @@
-# LSHA-framework
+# LSHA-Framework
 
-A monorepo containing:
+**A universal, configuration-driven web platform for learning Stochastic Hybrid Automata with L\*SHA.**
 
-| Directory | What it is |
-|---|---|
-| `backend/` | Django + Celery REST API wrapping the L\*SHA learning algorithm |
-| `frontend/` | React + Vite UI for submitting case studies and viewing results |
-| `uppaal-bridge/` | Host-side shim that lets the container reach UPPAAL |
+Describe a cyber-physical system in a JSON file, upload its data or simulation model, and get a learned model back, without writing a line of Python.
 
-Both applications are tracked directly in this repository. The four L\*SHA
-algorithm packages under `backend/core_algorithm/` are **git submodules**
-pointing at their upstream sources.
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-REST-092E20?logo=django&logoColor=white)
+![Celery](https://img.shields.io/badge/Celery-Redis-37814A?logo=celery&logoColor=white)
+![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+
+> Developed as my Master's thesis in Telecommunication Engineering at **Politecnico di Milano** (2026).
 
 ---
 
-## Cloning
+## Why this project exists
 
-The algorithm packages are submodules, so clone recursively — a plain
-`git clone` leaves those four directories **empty**:
+[L\*SHA](https://github.com/LesLivia/lsha) is an active automata-learning algorithm that builds **Stochastic Hybrid Automata (SHA)** from observed system traces. SHA are formal models of cyber-physical systems: discrete operating modes (heater on/off, machine idle/working) combined with continuous, stochastic physical behaviour inside each mode (temperature rising, operator fatigue growing).
 
-```bash
-git clone --recurse-submodules https://github.com/Rghaf/LSHA-Framework.git
+The reference implementation was a research artefact. Every case study had its own hand-written `sul_functions.py`, with hard-coded column positions, thresholds, guard logic and flow-fitting code. Adding a new system meant copying hundreds of lines of Python and rewriting them.
+
+**LSHA-Framework removes that step.** Everything that distinguishes one system from another is now supplied as **data**, not code:
+
+| Before | After |
+|---|---|
+| One Python module per case study | One engine for every case study |
+| Edit code to change variables, events or thresholds | Edit a JSON configuration |
+| Run scripts from the terminal | Submit, monitor and inspect runs from a web UI |
+| Local, manual setup | One-command Docker stack |
+
+## Features
+
+- **Declarative JSON schema** to describe any SHA-shaped system: variables and their roles, candidate flow models, events and guards, constants, and how traces are generated.
+- **Dynamic System Under Learning** (`dynamic_sul.py`) that interprets the schema at runtime, replacing all per-case-study code.
+- **Two trace sources** through the same pipeline: **UPPAAL** statistical model checking (simulation) or uploaded **CSV** logs from real machines.
+- **Asynchronous learning jobs** with Celery and Redis, monitored live in the Flower dashboard.
+- **React web interface** to define case studies step by step, upload data, browse built-in case studies and view results.
+- **REST API** (Django REST Framework) for scripting and automation.
+- **Built-in flow library:** constant, mean, linear, linear growth/decay, exponential growth/decay.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U[User] --> FE[React + Vite UI]
+    FE -->|REST API| BE[Django backend]
+    BE -->|queue job| R[(Redis)]
+    R --> W[Celery worker]
+    W --> E[Universal L*SHA engine<br/>Dynamic SUL · Teacher · ObsTable]
+    E -->|UPPAAL case studies| BR[UPPAAL bridge<br/>runs on host]
+    E -->|CSV case studies| CSV[(Uploaded traces)]
+    W --> RES[(Learned SHA + report)]
+    F[Flower dashboard] -.monitors.-> W
 ```
 
-Already cloned without it? Populate them with:
+The same `Learner` / `Teacher` / `ObsTable` core runs for every case study. Only the JSON configuration and the input data change.
 
-```bash
-git submodule update --init --recursive
-```
+## Validated case studies
 
-| Submodule (`backend/core_algorithm/…`) | Upstream | Pinned |
+The engine reproduces the four industrial case studies of the original L\*SHA work with no code changes between them:
+
+| Case study | System | Trace source |
 |---|---|---|
-| `lsha` | `LesLivia/lsha` | `bea16c0` |
-| `autotwin_automata_learning` | `AutotwinEU/autotwin_automata_learning` | `c9c4ce3` |
-| `sha2dt_semantic_mapper` | `LesLivia/sha2dt_semantic_mapper` | `3343a8b` |
-| `skg_connector` | `LesLivia/skg_connector` | `4d6d13f` |
+| **THERMO** | Room thermostat: temperature driven by a heater switching on/off | UPPAAL |
+| **HRI** | Human-robot interaction: operator fatigue during a collaborative task | UPPAAL and simulator logs |
+| **ENERGY** | Real CNC machine: spindle power as a function of speed and pressure | CSV (production data) |
+| **GREEN** | Olive-oil decanter centrifuge: bearing temperature behaviour | CSV (production data) |
 
-`core_algorithm/tasks.py` puts all four roots on `sys.path`; without them the
-Celery worker raises `ModuleNotFoundError` as soon as a learning task starts.
+All 26 shipped versions, with their JSON configurations, UPPAAL models and queries, are listed in [`docs/case-studies/`](docs/case-studies/README.md).
 
-> Input datasets (`case_files/PowModel_Learning/`, `OldData/`, `*.csv`) and all
-> generated output (`results/`, `media/`, `uploads/`, `db.sqlite3`) are excluded
-> from version control. The UPPAAL models, the case-study JSON configs and the
-> test suite **are** tracked, so the case studies remain runnable after a clone.
+## Example configuration
 
-Every shipped case study, one directory per version, each with its JSON and
-(where available) its UPPAAL model and query, is browsable under
-[`docs/case-studies/`](docs/case-studies/README.md) — a worked-example index of
-the `POST /api/case-study/` request format alongside the actual definitions.
+A trimmed version of the thermostat case study ([full file](docs/case-studies/thermo/v1/)):
+
+```json
+{
+  "case_study": "THERMO",
+  "variables": [
+    { "name": "T_r",  "role": "estimated", "type": "REAL" },
+    { "name": "t.ON", "role": "driver",    "type": "INT" }
+  ],
+  "models": [
+    { "id": 0, "name": "Heating", "type": "EXP_GROWTH" },
+    { "id": 1, "name": "Cooling", "type": "EXP_DECAY" }
+  ],
+  "events": [
+    { "symbol": "h_0", "model_id": 0, "guard": "t.ON == 1" },
+    { "symbol": "c_0", "model_id": 1, "guard": "t.ON == 0" }
+  ],
+  "trace_generation": { "strategy": "UPPAAL" }
+}
+```
+
+This says: *the room temperature `T_r` is the variable to learn; whenever the heater signal `t.ON` changes, a new segment starts; heating segments follow exponential growth and cooling segments follow exponential decay.* The learner then identifies the modes, the transitions between them, and the probability distributions of the flow parameters.
 
 ---
 
 ## Quick start
 
-Requires Docker Engine + the Compose plugin (see "Installing Docker" below if you
-don't have it yet).
+**Requirements:** [Docker Engine with the Compose plugin](https://docs.docker.com/engine/install/). UPPAAL 5.x on the host is only needed for the UPPAAL case studies (THERMO, HRI).
 
 ```bash
-cp .env.example .env        # edit values if needed — safe defaults are pre-filled
+# 1. Clone with submodules (the L*SHA algorithm packages are git submodules)
+git clone --recurse-submodules https://github.com/Rghaf/LSHA-Framework.git
+cd LSHA-Framework
 
+# 2. Configure
+cp .env.example .env        # safe local defaults are pre-filled
+
+# 3. Start everything: Redis, backend, worker, Flower, frontend, UPPAAL bridge
 ./run-stack.sh up --build
 ```
 
-`run-stack.sh` is a thin wrapper around `docker compose` that also starts the
-native UPPAAL bridge first (see "UPPAAL support" below) and stops it again when
-you Ctrl-C the stack, so this one command really does start everything: Redis,
-the Django backend, the Celery worker, the frontend, and UPPAAL. Every other
-subcommand (`down`, `logs`, `ps`, `exec`, ...) passes straight through to
-`docker compose`, so `./run-stack.sh down` etc. work exactly as you'd expect.
-If you'd rather manage the bridge yourself, plain `docker compose up --build`
-still works unchanged.
+Already cloned without `--recurse-submodules`? Run `git submodule update --init --recursive`, otherwise the worker fails with `ModuleNotFoundError` when a learning task starts.
 
-Which frontend you get is controlled by `COMPOSE_PROFILES` in `.env` (defaults
-to `dev` — Vite hot reload). To get the Nginx production build instead, either
-change `COMPOSE_PROFILES=prod` in `.env`, or override it for one run without
-editing the file:
+| Service | URL |
+|---|---|
+| Web UI (dev profile) | http://localhost:5173 |
+| Web UI (prod profile) | http://localhost:80 |
+| Backend API | http://localhost:8000 |
+| Django admin | http://localhost:8000/admin |
+| Flower (job monitoring) | http://localhost:5555 |
+
+`run-stack.sh` wraps `docker compose`: it starts the UPPAAL bridge first and stops it when you press Ctrl-C. Every other subcommand (`down`, `logs`, `ps`, `exec`, …) is passed straight through to `docker compose`.
+
+To use the Nginx production build instead of the Vite dev server:
 
 ```bash
 COMPOSE_PROFILES=prod ./run-stack.sh up --build
 ```
 
-- Backend API: http://localhost:8000
-- Django admin: http://localhost:8000/admin
-- **Celery dashboard (Flower): http://localhost:5555**
-- Frontend (dev profile): http://localhost:5173
-- Frontend (prod profile): http://localhost:80
-- Redis: localhost:6379
+### Watching a learning run
 
-Backend code, `db.sqlite3`, `media/`, `results/`, and `case_files/` are bind-mounted
-from `backend/` on the host, so data and code changes persist across
-`docker compose up`/`down` and Django's auto-reloader picks up edits immediately.
+Learning runs inside the Celery worker, so its output isn't shown in the browser.
+
+```bash
+docker compose logs -f celery-worker     # live algorithm output
+```
+
+Or open **Flower** at http://localhost:5555 to see running tasks, arguments, runtimes, results and full tracebacks. Task history persists across restarts.
 
 ---
 
-## Watching what the algorithm is doing
+## UPPAAL support
 
-Learning runs happen in the Celery worker, not the API, so their output does not
-appear in the browser. Two ways to watch:
-
-**Live logs.** Start the stack in the foreground and every service's output is
-interleaved in the terminal:
+UPPAAL 5.x's licence check crashes inside containers, so `verifyta` runs **natively on the host** and the backend reaches it through a small HTTP bridge in [`uppaal-bridge/`](uppaal-bridge/).
 
 ```bash
-./run-stack.sh up                 # Ctrl-C stops the stack (and the UPPAAL bridge)
+# Activate the licence once on the host
+/opt/uppaal/lib/app/bin/verifyta -k <your-licence-key>
 ```
 
-Or, when running detached (`-d`), follow one service:
+`./run-stack.sh up` starts the bridge automatically. To run it yourself, use `./uppaal-bridge/run-bridge.sh`. CSV case studies (ENERGY, GREEN) don't need UPPAAL at all. See [`uppaal-bridge/README.md`](uppaal-bridge/README.md) for the protocol and configuration.
 
-```bash
-docker compose logs -f celery-worker      # the learning pipeline
-docker compose logs -f                    # everything
-docker compose logs --tail 100 celery-worker
+## Project structure
+
+```
+LSHA-Framework/
+├── backend/
+│   ├── lsha_web/              Django project settings and Celery app
+│   ├── rest_api/              REST API: case studies and CSV uploads
+│   └── core_algorithm/
+│       ├── dynamic_sul.py             JSON-driven System Under Learning
+│       ├── dynamic_tracegenerator.py  UPPAAL and CSV trace generation
+│       ├── teacher.py                 Model identification and hypothesis testing
+│       ├── dynamic_obstable.py        Observation table
+│       ├── tasks.py                   End-to-end Celery learning pipeline
+│       └── lsha/, skg_connector/, …   Upstream L*SHA packages (git submodules)
+├── frontend/                  React + Vite web interface
+├── uppaal-bridge/             Host-side bridge to UPPAAL's verifyta
+├── docs/
+│   ├── THESIS_DOCUMENTATION.md    Full technical documentation
+│   ├── CHAPTER_5_Implementation.md
+│   └── case-studies/              All shipped case-study definitions
+├── docker-compose.yml
+└── run-stack.sh
 ```
 
-Output streams in real time — the image sets `PYTHONUNBUFFERED=1`, without which
-Python block-buffers and task output only lands once the task ends. Logs rotate at
-20 MB × 5 files per service, since a single run can emit thousands of lines.
+### Services (`docker-compose.yml`)
 
-**Flower dashboard — http://localhost:5555.** A live web view of the queue: which
-tasks are running, their arguments, runtime, return value, and full tracebacks for
-failures. Survives restarts (`--persistent`, stored in `backend/results/flower.db`)
-so past runs stay inspectable. The worker runs with `-E` so it emits the task
-events Flower needs.
+- **redis**: Celery broker and result backend.
+- **backend**: Django on `:8000`, the only service that runs migrations.
+- **celery-worker**: runs the learning pipeline.
+- **flower**: Celery dashboard on `:5555`.
+- **frontend-dev** *(profile `dev`)*: Vite dev server with hot reload on `:5173`.
+- **frontend-prod** *(profile `prod`)*: Nginx production build on `:80`.
 
-It is also queryable, which is handy for scripting:
+Environment variables are documented in [`.env.example`](.env.example). Change `DJANGO_SECRET_KEY` and `UPPAAL_BRIDGE_TOKEN` before deploying anywhere other than your own machine.
 
-```bash
-curl -s localhost:5555/api/workers | python3 -m json.tool
-curl -s localhost:5555/api/tasks   | python3 -m json.tool
-```
+## Upstream algorithm packages
 
-To password-protect it, add `FLOWER_BASIC_AUTH=user:pass` to `.env`. The compose file
-sets `FLOWER_UNAUTHENTICATED_API=True` so the JSON API works without credentials —
-remove that line if you ever expose port 5555 beyond localhost.
+The learning core is pulled in as git submodules, pinned to these commits:
 
----
-
-## Vendored algorithm packages
-
-`backend/core_algorithm/` contains four in-tree packages that the learning pipeline
-imports. They had been committed as bare git *gitlinks* with no `.gitmodules`, so every
-checkout produced four empty directories. They are now vendored as plain tracked files,
-restored from the upstream sources at the exact commits the gitlinks pinned:
-
-| Directory | Upstream | Pinned commit |
+| Path (`backend/core_algorithm/…`) | Upstream | Commit |
 |---|---|---|
 | `lsha` | [LesLivia/lsha](https://github.com/LesLivia/lsha) | `bea16c0` |
 | `autotwin_automata_learning` | [AutotwinEU/autotwin_automata_learning](https://github.com/AutotwinEU/autotwin_automata_learning) | `c9c4ce3` |
 | `sha2dt_semantic_mapper` | [LesLivia/sha2dt_semantic_mapper](https://github.com/LesLivia/sha2dt_semantic_mapper) | `3343a8b` |
 | `skg_connector` | [LesLivia/skg_connector](https://github.com/LesLivia/skg_connector) | `4d6d13f` |
 
-All four roots are placed on `sys.path` by `core_algorithm/tasks.py` — `lsha`'s own
-modules import `skg_main` as a top-level package, so `LSHA_ROOT` alone is not enough.
+## Documentation
 
----
+- [**Thesis documentation**](docs/THESIS_DOCUMENTATION.md): theory, case-study physics, the JSON schema, every engine component, and worked examples.
+- [**Implementation chapter**](docs/CHAPTER_5_Implementation.md): how the hard-coded scripts became a configurable architecture.
+- [**Case studies**](docs/case-studies/README.md): every shipped configuration, ready to submit to `POST /api/case-study/`.
 
-## UPPAAL support
+## Limitations and future work
 
-`verifyta` is proprietary and **cannot run inside a container** — UPPAAL 5.x's licence
-check segfaults under containerisation regardless of privileges or mounts. It therefore
-runs natively on the host, and the container reaches it through a small HTTP bridge in
-[`uppaal-bridge/`](uppaal-bridge/).
+- One estimated (learned) variable per case study; multi-output systems would need the dynamic SUL generalised.
+- The flow-model catalogue is fixed; a plugin registry would make new flow types easier to add.
+- Variables must be declared manually; auto-detecting roles from an uploaded CSV is a natural next step.
+- Missing columns currently produce warnings instead of failing fast.
 
-Activate the licence once on the host:
+See [Section 14 of the thesis documentation](docs/THESIS_DOCUMENTATION.md#14-limitations-and-future-work) for the full list.
 
-```bash
-/opt/uppaal/lib/app/bin/verifyta -k <your-licence-key>
-```
+## Acknowledgements
 
-`./run-stack.sh up --build` (see "Quick start" above) then starts the bridge for
-you automatically before bringing the stack up, and stops it again when the
-stack does. To run the bridge on its own — e.g. for `docker compose up` without
-the wrapper — start it by hand and leave it running in its own terminal:
+L\*SHA was created by Livia Lestingi, Marcello M. Bersani and Matteo Rossi at Politecnico di Milano. This project builds on their [original implementation](https://github.com/LesLivia/lsha) and the [AUTO-TWIN](https://github.com/AutotwinEU) automata-learning packages.
 
-```bash
-./uppaal-bridge/run-bridge.sh
-```
+## Author
 
-See [`uppaal-bridge/README.md`](uppaal-bridge/README.md) for the full rationale,
-protocol and configuration. CSV/SIM case studies (ENERGY, GREEN) don't use UPPAAL and
-run with the bridge stopped.
-
----
-
-## Installing Docker (Ubuntu)
-
-```bash
-sudo apt remove -y docker docker-engine docker.io containerd runc
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg
-
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-sudo usermod -aG docker $USER
-newgrp docker
-
-docker --version
-docker compose version
-```
-
----
-
-## Services (`docker-compose.yml`)
-
-- **redis** — Celery broker/result backend (`redis:7-alpine`).
-- **backend** — Django dev server on `:8000`, built from `backend/Dockerfile`. The
-  only service that runs migrations (`RUN_MIGRATIONS=1`), so the containers sharing
-  the SQLite file don't contend for its write lock.
-- **celery-worker** — same image as `backend`, runs `celery -A lsha_web worker -E`.
-- **flower** — same image, Celery dashboard on `:5555`.
-- **frontend-dev** *(profile `dev`)* — Vite dev server on `:5173` with hot reload.
-- **frontend-prod** *(profile `prod`)* — Nginx serving the production build on `:80`.
-
-Environment variables are documented in `.env.example`.
+**Reza Ghadiri**, [GitHub](https://github.com/Rghaf) · [LinkedIn](https://www.linkedin.com/in/rghaf/)
